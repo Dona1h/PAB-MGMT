@@ -1,0 +1,25 @@
+{
+  "name": "PAB 수영 운영 도구",
+  "short_name": "PAB 도구",
+  "description": "PAB 성인 수영장 운영 통합 도구",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6f7",
+  "theme_color": "#1a1a1a",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
