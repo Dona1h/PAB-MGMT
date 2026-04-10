@@ -291,7 +291,7 @@ if('serviceWorker' in navigator){
 // ================================================================
 // ⚙️  GAS 연동 설정 — 아래 URL 과 TOKEN 을 실제 값으로 교체하세요
 // ================================================================
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbwVEFatyNHTnHnu5wYYDJ_dyljcMNSXllDlL2K2_4PXyNbM2L9oIaBmfZUpqpQgOps/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbz35TSOHShPq0EjpUs-0Ku67nur7yqdepKgXVu5HUEzxN5smSapxRZrpiSbTvCSJ89e/exec';
 const GAS_TOKEN = 'pab2025';
 
 // ── GAS 통신 유틸리티 (GET 방식 통일 · CORS 문제 해결) ──
@@ -2002,6 +2002,7 @@ function initBoard() {
   var _nc = {};
   var curRole = null, pinVerified = false, curView = 'inbox';
   var msgs = [], pinInput = '';
+  var _latestNotices = null; // GAS에서 받은 최신 공고 캐시
 
   // ── GAS (하드코딩된 상수 사용) ──
   async function gasGet(action){ return GAS.get(action); }
@@ -2028,7 +2029,8 @@ function initBoard() {
     const [m,n,s]=await Promise.all([gasGet('getMsgs'),gasGet('getNotices'),gasGet('getSettings')]);
     msgs = m || loadLocal(MKEY, defaultMsgs());
     if(m) saveLocal(MKEY,m);
-    if(n) saveLocal(NKEY,n);
+    if(n){ _latestNotices=n; saveLocal(NKEY,n); }
+    else { _latestNotices=loadLocal(NKEY,[]); }
     if(s) saveLocal(SKEY,s);
   }
 
@@ -2086,7 +2088,9 @@ function initBoard() {
 
   // ── 화면: 홈 ──
   function renderHome(){
-    const notices=loadLocal(NKEY,[]).filter(n=>n.active!==false).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    // GAS에서 받은 최신 notices 사용 (loadAll이 미리 업데이트함)
+    const allNotices = (typeof _latestNotices !== 'undefined' ? _latestNotices : null) || loadLocal(NKEY,[]);
+    const notices=allNotices.filter(n=>n.active!==false).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
     const policy=notices.filter(n=>n.type==='policy'), general=notices.filter(n=>n.type==='notice');
     _nc={};
     let h=`<div style="padding:0.5rem 0 1.5rem;">`;
