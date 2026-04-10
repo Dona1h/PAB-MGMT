@@ -39,7 +39,7 @@ button,input,select,textarea{ font-family:inherit; }
 
 <script>
 // ── GAS 통신 v2 (JSONP + GET write) ──
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbyNLkDCamf5aHMGaEJ7WHLktmGnzohicoeu2I77LwWgaQEqugbLrNBLAIygFX2sgrkd/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbw-bGN4TQDrVHS1D9LlH7ZTqJ8cjvkDjkjAmkeIOIivkuv7PmTfhqLWBg6cTP1XfuYb/exec';
 const GAS_TOKEN = 'pab2024';
 
 function gasRead(action) {
@@ -362,6 +362,18 @@ function renderPins() {
       ${hasPin?`<div style="margin-top:8px;"><button data-clear-pin="${r}" style="font-size:11px;color:#bbb;background:none;border:none;cursor:pointer;text-decoration:underline;">PIN 초기화</button></div>`:''}
     </div>`;
   });
+  h += `<div class="card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <div style="width:36px;height:36px;border-radius:50%;background:#F0FDF4;display:flex;align-items:center;justify-content:center;font-size:14px;">👥</div>
+      <div><div style="font-size:13px;font-weight:500;">게스트 PIN</div>
+      <div style="font-size:11px;color:#888;">가격표·계산기 전용 (포스트잇 제외)</div></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <input type="password" id="pin-guest" class="input" style="flex:1;font-size:16px;letter-spacing:6px;" maxlength="4" placeholder="게스트 PIN" inputmode="numeric"/>
+      <button data-set-pin="guest" style="padding:10px 16px;border-radius:8px;background:#15803D;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:500;white-space:nowrap;">설정</button>
+    </div>
+    ${settings.guestPin?`<button data-clear-pin="guest" style="margin-top:8px;font-size:11px;color:#bbb;background:none;border:none;cursor:pointer;text-decoration:underline;">초기화</button>`:''}
+  </div>`;
   h += `<div id="pin-msg" style="text-align:center;font-size:12px;min-height:18px;margin-top:4px;"></div>`;
   return h;
 }
@@ -472,14 +484,14 @@ function bindMain() {
     const pin  = (app.querySelector('#pin-'+role)||{value:''}).value.trim();
     const msg  = app.querySelector('#pin-msg');
     if (!/^\d{4}$/.test(pin)) { if(msg){msg.textContent='4자리 숫자를 입력해 주세요.';msg.style.color='#EF4444';} return; }
-    settings.pins[role] = await hashPin(pin);
+    if(role==='guest'){settings.guestPin=await hashPin(pin);}else{settings.pins[role]=await hashPin(pin);}
     saveSettings(settings);
-    if(msg){msg.textContent='✅ '+ROLES[role].l+' PIN 설정 완료'; msg.style.color='#15803D';}
+    if(msg){msg.textContent='✅ '+role==='guest'?'게스트':(ROLES[role]?ROLES[role].l:role)+' PIN 설정 완료'; msg.style.color='#15803D';}
     setTimeout(() => render(), 800);
   }));
   app.querySelectorAll('[data-clear-pin]').forEach(btn => btn.addEventListener('click', () => {
-    if (confirm(ROLES[btn.dataset.clearPin].l + ' PIN을 초기화하시겠습니까?')) {
-      settings.pins[btn.dataset.clearPin] = '';
+    if (confirm((btn.dataset.clearPin==='guest'?'게스트':(ROLES[btn.dataset.clearPin]?ROLES[btn.dataset.clearPin].l:'')) + ' PIN을 초기화하시겠습니까?')) {
+      const cr=btn.dataset.clearPin;if(cr==='guest'){settings.guestPin='';}else{settings.pins[cr]='';} saveSettings(settings); render();
       saveSettings(settings); render();
     }
   }));
