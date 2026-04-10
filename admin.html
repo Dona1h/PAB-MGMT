@@ -55,7 +55,7 @@
 // ================================================================
 // ⚙️  GAS 연동 설정 — 아래 URL 과 TOKEN 을 실제 값으로 교체하세요
 // ================================================================
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbwVEFatyNHTnHnu5wYYDJ_dyljcMNSXllDlL2K2_4PXyNbM2L9oIaBmfZUpqpQgOps/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbz35TSOHShPq0EjpUs-0Ku67nur7yqdepKgXVu5HUEzxN5smSapxRZrpiSbTvCSJ89e/exec';
 const GAS_TOKEN = 'pab2024';
 
 // ── GAS 통신 유틸리티 (GET 방식 통일 · CORS 문제 해결) ──
@@ -521,8 +521,17 @@ function bindMain(){
     const rList=to==='all'?ALL:(ALL.indexOf(to)>=0?[to]:[]);
     const status={}; ALL.forEach(r=>{ status[r]=rList.indexOf(r)>=0?'unread':null; });
     msgs=[{id:Date.now()+'',type,from:'leader',to,content,createdAt:new Date().toISOString(),status},...msgs];
-    saveLocal(MKEY,msgs); gasPost('saveMsgs',msgs);
+    saveLocal(MKEY,msgs);
     view='main'; render();
+    gasPost('saveMsgs',msgs).then(ok=>{
+      const msg2=document.createElement('div');
+      msg2.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:999;';
+      msg2.style.background=ok?'#1a1a1a':'#EF4444';
+      msg2.style.color='#fff';
+      msg2.textContent=ok?'✅ 전송 완료 — 매니저 수신함에 전달됩니다':'❌ 전송 실패 — GAS URL 확인 필요';
+      document.body.appendChild(msg2);
+      setTimeout(()=>msg2.remove(),3000);
+    });
   });
 
   // 공고 게시
@@ -532,8 +541,17 @@ function bindMain(){
     const type=(app.querySelector('#n-type')||{value:'notice'}).value;
     const title=(app.querySelector('#n-title')||{value:''}).value.trim();
     notices=[{id:Date.now()+'',type,title,content,createdAt:new Date().toISOString(),active:true},...notices];
-    saveLocal(NKEY,notices); gasPost('saveNotices',notices);
-    render();
+    saveLocal(NKEY,notices);
+    render(); // 즉시 화면 갱신
+    gasPost('saveNotices',notices).then(ok=>{
+      const msg=document.createElement('div');
+      msg.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:999;';
+      msg.style.background=ok?'#1a1a1a':'#EF4444';
+      msg.style.color='#fff';
+      msg.textContent=ok?'✅ 공고 게시 완료 — 매니저 앱에 반영됩니다':'❌ 저장 실패 — GAS URL 확인 필요';
+      document.body.appendChild(msg);
+      setTimeout(()=>msg.remove(),3000);
+    });
   });
 
   // 공고 내리기
