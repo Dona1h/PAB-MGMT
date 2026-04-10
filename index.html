@@ -3,20 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PAB 운영 도구 - 매니저</title>
+<title>PAB 운영 도구</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="PAB 매니저">
 <meta name="theme-color" content="#1a1a1a">
 <link rel="manifest" href="manifest.json">
-<script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('./sw.js').catch(()=>{});
-  });
-}
-</script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f5f6f7; color:#1a1a1a; min-height:100vh; }
@@ -286,98 +278,50 @@ if('serviceWorker' in navigator){
   <div id="board-root" style="padding:0.5rem 0 1.5rem;"></div>
 </div>
 
-
 <script>
 // ================================================================
-// ⚙️  GAS 연동 설정 — 아래 URL 과 TOKEN 을 실제 값으로 교체하세요
+// PAB GAS 통신 레이어 — 단순하고 확실하게
 // ================================================================
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbz35TSOHShPq0EjpUs-0Ku67nur7yqdepKgXVu5HUEzxN5smSapxRZrpiSbTvCSJ89e/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbx4hvojWYGwfqPu8BXhCYJJHN_5wys95OFVqDMdTdtj5jfHrLSqW94w5SfInNrKYcI/exec';
 const GAS_TOKEN = 'pab2024';
 
-// ── GAS 통신 유틸리티 (GET 방식 통일 · CORS 문제 해결) ──
-// 이 코드 블록을 index.html과 admin.html 양쪽 <script>에 포함
+// 읽기: GET + 5초 타임아웃
+async function gasRead(action) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const r = await fetch(
+      `${GAS_URL}?token=${GAS_TOKEN}&action=${action}&_=${Date.now()}`,
+      { signal: ctrl.signal, redirect: 'follow', cache: 'no-store' }
+    );
+    clearTimeout(timer);
+    const j = await r.json();
+    return j.ok ? j.data : null;
+  } catch(e) {
+    clearTimeout(timer);
+    return null;
+  }
+}
 
-const GAS = {
+// 쓰기: no-cors POST (파이어앤드포겟 — CORS 완전 우회)
+function gasWrite(action, data) {
+  try {
+    fetch(GAS_URL, {
+      method:  'POST',
+      mode:    'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body:    JSON.stringify({ token: GAS_TOKEN, action, data })
+    });
+  } catch(e) { /* silent */ }
+}
 
-  // ── GET 요청 (읽기) ──
-  async get(action) {
-    const url = `${GAS_URL}?action=${action}&token=${GAS_TOKEN}&t=${Date.now()}`;
-    try {
-      const r = await fetch(url, {
-        method: 'GET',
-        redirect: 'follow',
-        cache: 'no-store',
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || 'GAS error');
-      return j.data;
-    } catch(e) {
-      console.warn(`[GAS.get] ${action} 실패:`, e.message);
-      return null;
-    }
-  },
-
-  // ── GET 방식 저장 (POST 대신 GET + payload 파라미터) ──
-  async save(action, data) {
-    const payload = encodeURIComponent(JSON.stringify(data));
-    // URL 길이 제한(~8000자) 초과 시 청크 분할 저장
-    if (payload.length > 6000) {
-      return GAS._saveChunked(action, data);
-    }
-    const url = `${GAS_URL}?action=${action}&token=${GAS_TOKEN}&payload=${payload}&t=${Date.now()}`;
-    try {
-      const r = await fetch(url, {
-        method: 'GET',
-        redirect: 'follow',
-        cache: 'no-store',
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
-      return !!j.ok;
-    } catch(e) {
-      // GET 실패 시 POST fallback
-      console.warn(`[GAS.save] GET 실패, POST fallback:`, e.message);
-      return GAS._savePost(action, data);
-    }
-  },
-
-  // ── POST fallback ──
-  async _savePost(action, data) {
-    try {
-      const r = await fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action, data, token: GAS_TOKEN }),
-        redirect: 'follow',
-      });
-      const j = await r.json();
-      return !!j.ok;
-    } catch(e) {
-      console.warn(`[GAS.save] POST도 실패:`, e.message);
-      return false;
-    }
-  },
-
-  // ── 청크 저장 (데이터가 클 경우) ──
-  async _saveChunked(action, data) {
-    // 전체를 POST로 처리 (청크 분할보다 안정적)
-    return GAS._savePost(action, data);
-  },
-
-  // ── 연결 테스트 ──
-  async ping() {
-    const url = `${GAS_URL}?action=ping&token=${GAS_TOKEN}&t=${Date.now()}`;
-    try {
-      const r = await fetch(url, { method:'GET', redirect:'follow', cache:'no-store' });
-      const j = await r.json();
-      return j.ok ? j.ts : null;
-    } catch(e) {
-      return null;
-    }
-  },
-};
- // Code.gs ACCESS_TOKEN 과 동일
+// localStorage 헬퍼
+function ls_get(k, def) {
+  try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch(e) { return def; }
+}
+function ls_set(k, v) {
+  try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {}
+}
 
 // ── 탭 전환 ──
 const tabBtns = document.querySelectorAll('.tab-btn');
@@ -399,7 +343,7 @@ tabBtns.forEach(btn => {
       if (tab === 'change') initChange();
       if (tab === 'board') initBoard();
     } else {
-      if (tab === 'board' && window._pabBoardRender) window._pabBoardRender();
+      if (tab === 'board' && window._boardRefresh) window._boardRefresh();
     }
   });
 });
@@ -1983,263 +1927,283 @@ function render(){
 render();
 })();}
 
-// ── 📌 포스트잇 (매니저 수신함 · PIN 인증) ──
+// ── 📌 포스트잇 ──
 function initBoard() {
-  const MKEY = 'pab-inbox-v2';
-  const NKEY = 'pab-notices-v2';
-  const SKEY = 'pab-settings-v2';
+  const MKEY = 'pab-msgs-v1';
+  const NKEY = 'pab-notices-v1';
+  const SKEY = 'pab-settings-v1';
+
   const ROLES = {
-    morning:   { l:'오전 매니저님', bg:'#EFF6FF', tx:'#1D4ED8', dot:'#3B82F6', init:'오전' },
-    afternoon: { l:'오후 매니저님', bg:'#F0FDF4', tx:'#15803D', dot:'#22C55E', init:'오후' },
-    evening:   { l:'저녁 매니저님', bg:'#FFFBEB', tx:'#B45309', dot:'#F59E0B', init:'저녁' },
+    morning:   { l:'오전 매니저님', bg:'#EFF6FF', tx:'#1D4ED8', init:'오전' },
+    afternoon: { l:'오후 매니저님', bg:'#F0FDF4', tx:'#15803D', init:'오후' },
+    evening:   { l:'저녁 매니저님', bg:'#FFFBEB', tx:'#B45309', init:'저녁' },
   };
   const TYPES = {
-    handover:{ l:'전달사항', bg:'#F0FDF4', tx:'#15803D' },
-    caution: { l:'주의사항', bg:'#FEF2F2', tx:'#B91C1C' },
+    handover: { l:'전달사항', bg:'#F0FDF4', tx:'#15803D' },
+    caution:  { l:'주의사항', bg:'#FEF2F2', tx:'#B91C1C' },
   };
   const ALL = ['morning','afternoon','evening'];
-  const PIN_SALT = 'pab_pin_2025';
-  var _nc = {};
-  var curRole = null, pinVerified = false, curView = 'inbox';
-  var msgs = [], pinInput = '';
-  var _latestNotices = null; // GAS에서 받은 최신 공고 캐시
+  const PIN_SALT = 'pab_pin_salt_2025';
 
-  // ── GAS (하드코딩된 상수 사용) ──
-  async function gasGet(action){ return GAS.get(action); }
-  async function gasPost(action, data){ return GAS.save(action, data); }
+  // 상태
+  var curRole = null, pinOK = false, view = 'home', pinInput = '';
+  var msgs = [], notices = [], settings = { pins: {} };
+  var synced = false;
 
   // ── 데이터 ──
-  function saveLocal(k,d){ try{localStorage.setItem(k,JSON.stringify(d));}catch(e){} }
-  function loadLocal(k,def){ try{const s=localStorage.getItem(k);if(s){const p=JSON.parse(s);if(p)return p;}}catch(e){} return def; }
-  function rcpts(to){ return to==='all'?ALL:(ALL.indexOf(to)>=0?[to]:[]); }
-  function mySt(m,r){ return m.status&&m.status[r]!=null?m.status[r]:null; }
-  function inbox(r){ return msgs.filter(m=>mySt(m,r)!==null&&m.from!==r); }
-  function unread(r){ return inbox(r).filter(m=>mySt(m,r)==='unread').length; }
-  function bSave(){ saveLocal(MKEY,msgs); gasPost('saveMsgs',msgs); }
-  function mkSt(list,st){ st=st||'unread'; const o={}; ALL.forEach(r=>{ o[r]=list.indexOf(r)>=0?st:null; }); return o; }
+  function localMsgs()     { return ls_get(MKEY, []); }
+  function localNotices()  { return ls_get(NKEY, []); }
+  function localSettings() { return ls_get(SKEY, { pins: {} }); }
 
-  function defaultMsgs(){
-    return [
-      {id:'d1',type:'caution',from:'morning',to:'afternoon',content:'레인3 배수구 커버 느슨함.\n시설팀 연락 필요.',createdAt:new Date(Date.now()-14400000).toISOString(),status:mkSt(['afternoon'])},
-      {id:'d2',type:'handover',from:'afternoon',to:'evening',content:'14시반 신규 문의자 1명.\n내일 재방문 예정.',createdAt:new Date(Date.now()-3600000).toISOString(),status:mkSt(['evening'])},
-    ];
+  function saveMsgs(data)     { ls_set(MKEY, data); gasWrite('saveMsgs', data); }
+  function saveNotices(data)  { ls_set(NKEY, data); gasWrite('saveNotices', data); }
+  function saveSettings(data) { ls_set(SKEY, data); gasWrite('saveSettings', data); }
+
+  async function syncFromGAS() {
+    const [m, n, s] = await Promise.all([
+      gasRead('getMsgs'),
+      gasRead('getNotices'),
+      gasRead('getSettings'),
+    ]);
+    if (m) { msgs = m;        ls_set(MKEY, m); }
+    else     msgs = localMsgs();
+
+    if (n) { notices = n;     ls_set(NKEY, n); }
+    else     notices = localNotices();
+
+    if (s) { settings = s;    ls_set(SKEY, s); }
+    else     settings = localSettings();
+
+    if (!settings.pins) settings.pins = {};
+    synced = !!(m || n || s);
   }
 
-  async function loadAll(){
-    const [m,n,s]=await Promise.all([gasGet('getMsgs'),gasGet('getNotices'),gasGet('getSettings')]);
-    msgs = m || loadLocal(MKEY, defaultMsgs());
-    if(m) saveLocal(MKEY,m);
-    if(n){ _latestNotices=n; saveLocal(NKEY,n); }
-    else { _latestNotices=loadLocal(NKEY,[]); }
-    if(s) saveLocal(SKEY,s);
+  // ── PIN ──
+  async function hashPin(pin) {
+    const buf = await crypto.subtle.digest('SHA-256',
+      new TextEncoder().encode(pin + PIN_SALT));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
   }
-
-  // ── PIN 해시 ──
-  async function hashPin(pin){
-    const enc=new TextEncoder();
-    const buf=await crypto.subtle.digest('SHA-256',enc.encode(pin+PIN_SALT));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-  async function verifyPin(pin, role){
-    const settings = loadLocal(SKEY, {pins:{}});
-    const storedHash = settings.pins && settings.pins[role];
-    if(!storedHash) return true; // PIN 미설정 시 통과
-    const h = await hashPin(pin);
-    return h === storedHash;
+  async function checkPin(pin, role) {
+    const stored = settings.pins && settings.pins[role];
+    if (!stored) return true; // 미설정 → 통과
+    return await hashPin(pin) === stored;
   }
 
   // ── 포맷 ──
-  function fmt(iso){
-    const d=new Date(iso),diff=Date.now()-d;
-    if(diff<3600000) return Math.floor(diff/60000)+'분 전';
-    if(diff<86400000) return Math.floor(diff/3600000)+'시간 전';
-    if(diff<172800000) return '어제 '+d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    return d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  function fmt(iso) {
+    const d = new Date(iso), diff = Date.now() - d;
+    if (diff < 3600000)   return Math.floor(diff / 60000) + '분 전';
+    if (diff < 86400000)  return Math.floor(diff / 3600000) + '시간 전';
+    if (diff < 172800000) return '어제 ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    return d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   }
-  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function bdg(bg,tx,txt){ return `<span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;background:${bg};color:${tx};white-space:nowrap;">${txt}</span>`; }
-  function tabRow(av){
-    return `<div style="display:flex;border-bottom:0.5px solid #ddd;margin-bottom:14px;">
-      <button data-bd-view="inbox" style="padding:7px 16px;font-size:12px;cursor:pointer;font-weight:${av==='inbox'?500:400};color:${av==='inbox'?'#1a1a1a':'#888'};background:none;border:none;border-bottom:${av==='inbox'?'2px solid #1a1a1a':'2px solid transparent'};">수신함</button>
-      <button data-bd-view="sent" style="padding:7px 16px;font-size:12px;cursor:pointer;font-weight:${av==='sent'?500:400};color:${av==='sent'?'#1a1a1a':'#888'};background:none;border:none;border-bottom:${av==='sent'?'2px solid #1a1a1a':'2px solid transparent'};">발신함</button>
-    </div>`;
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-  function roleHdr(){
-    const v=ROLES[curRole];
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-      <button data-bd-logout style="border:none;background:none;cursor:pointer;font-size:18px;color:#aaa;padding:0;line-height:1;flex-shrink:0;">←</button>
-      <div style="display:flex;align-items:center;gap:8px;flex:1;">
-        <div style="width:32px;height:32px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:${v.tx};">${v.init}</div>
-        <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l}</div>
-      </div>
-      <button data-bd-compose style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>
-    </div>`;
-  }
-  function noticeItem(n,bc){
-    _nc[n.id]=n.content;
-    const LIMIT=120,short=n.content.length>LIMIT;
-    return `<div style="background:#fff;border:0.5px solid ${bc};border-radius:10px;padding:10px 12px;margin-bottom:6px;">
-      ${n.title?`<div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:4px;">${esc(n.title)}</div>`:''}
-      <div id="ni-c-${n.id}" style="font-size:12px;color:#333;line-height:1.6;white-space:pre-wrap;">${esc(short?n.content.slice(0,LIMIT)+'…':n.content)}</div>
-      ${short?`<button data-ni="${n.id}" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;padding:3px 0;margin-top:2px;">더보기 ▼</button>`:''}
-      <div style="font-size:10px;color:#bbb;margin-top:5px;">${fmt(n.createdAt)}</div>
-    </div>`;
+  function bdg(bg, tx, t) {
+    return `<span style="display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;background:${bg};color:${tx};white-space:nowrap;">${esc(t)}</span>`;
   }
 
-  // ── 화면: 홈 ──
-  function renderHome(){
-    // GAS에서 받은 최신 notices 사용 (loadAll이 미리 업데이트함)
-    const allNotices = (typeof _latestNotices !== 'undefined' ? _latestNotices : null) || loadLocal(NKEY,[]);
-    const notices=allNotices.filter(n=>n.active!==false).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-    const policy=notices.filter(n=>n.type==='policy'), general=notices.filter(n=>n.type==='notice');
-    _nc={};
-    let h=`<div style="padding:0.5rem 0 1.5rem;">`;
+  // ── 수신 카운트 ──
+  function unreadFor(role) {
+    return msgs.filter(m => m.status && m.status[role] === 'unread' && m.from !== role).length;
+  }
+
+  // ════════════════════════
+  //  화면 렌더러
+  // ════════════════════════
+
+  function renderHome() {
+    const activeN = notices.filter(n => n.active !== false)
+                           .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const policy  = activeN.filter(n => n.type === 'policy');
+    const general = activeN.filter(n => n.type === 'notice');
+
+    let h = `<div style="padding:.5rem 0 1.5rem;">`;
+
     // 전체 공고
-    h+=`<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:14px;padding:16px;margin-bottom:22px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    h += `<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:14px;padding:16px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="font-size:13px;font-weight:600;color:#1a1a1a;">📢 전체 공고</div>
-        <span style="font-size:10px;color:#888;">${notices.length}건</span>
+        <span style="font-size:10px;color:#888;">${activeN.length}건 · ${synced ? '☁ 동기화됨' : '로컬'}</span>
       </div>`;
-    if(notices.length===0) h+=`<div style="text-align:center;padding:16px 0;color:#bbb;font-size:12px;">등록된 공고가 없습니다.</div>`;
-    else {
-      if(policy.length) { h+=`<div style="font-size:10px;font-weight:500;color:#7E22CE;margin-bottom:6px;">정책 공지</div>`; policy.forEach(n=>h+=noticeItem(n,'#ede9fe')); }
-      if(general.length) { h+=`<div style="font-size:10px;font-weight:500;color:#1D4ED8;margin:${policy.length?'10px':'0'} 0 6px;">일반 공지</div>`; general.forEach(n=>h+=noticeItem(n,'#dbeafe')); }
+    if (!activeN.length) {
+      h += `<div style="text-align:center;padding:16px 0;color:#bbb;font-size:12px;">등록된 공고가 없습니다.</div>`;
+    } else {
+      if (policy.length) {
+        h += `<div style="font-size:10px;font-weight:500;color:#7E22CE;margin-bottom:6px;">정책 공지</div>`;
+        policy.forEach(n => h += noticeCard(n, '#ede9fe'));
+      }
+      if (general.length) {
+        h += `<div style="font-size:10px;font-weight:500;color:#1D4ED8;margin:${policy.length?'10px':'0'} 0 6px;">일반 공지</div>`;
+        general.forEach(n => h += noticeCard(n, '#dbeafe'));
+      }
     }
-    h+=`</div>`;
+    h += `</div>`;
+
     // 역할 선택
-    h+=`<div style="text-align:center;padding:0 0 16px;">
+    h += `<div style="text-align:center;margin-bottom:16px;">
       <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">매니저 수신함</div>
       <div style="font-size:12px;color:#888;">출근 시 본인 역할을 선택해 주세요</div>
     </div>`;
-    const settings=loadLocal(SKEY,{pins:{}});
-    Object.keys(ROLES).forEach(k=>{
-      const v=ROLES[k],n=unread(k);
-      const hasPIN=!!(settings.pins&&settings.pins[k]);
-      h+=`<button data-bd-login="${k}" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:16px 18px;margin-bottom:10px;border-radius:12px;border:0.5px solid #e0e0e0;background:#fff;cursor:pointer;text-align:left;box-sizing:border-box;">
+
+    Object.keys(ROLES).forEach(k => {
+      const v = ROLES[k];
+      const n = unreadFor(k);
+      const hasPIN = !!(settings.pins && settings.pins[k]);
+      h += `<button data-role="${k}" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:16px 18px;margin-bottom:10px;border-radius:12px;border:0.5px solid #e0e0e0;background:#fff;cursor:pointer;text-align:left;box-sizing:border-box;">
         <div style="display:flex;align-items:center;gap:12px;">
           <div style="width:40px;height:40px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:${v.tx};">${v.init}</div>
           <div>
-            <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l}</div>
-            <div style="font-size:11px;color:#888;margin-top:2px;">${n>0?`미확인 ${n}건`:'새 메시지 없음'} ${hasPIN?'🔒':''}</div>
+            <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l} ${hasPIN ? '🔒' : ''}</div>
+            <div style="font-size:11px;color:#888;margin-top:2px;">${n > 0 ? `미확인 ${n}건` : '새 메시지 없음'}</div>
           </div>
         </div>
-        ${n>0?`<div style="background:#EF4444;color:#fff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;">${n}</div>`:'<span style="font-size:13px;color:#ccc;">›</span>'}
+        ${n > 0 ? `<div style="background:#EF4444;color:#fff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;">${n}</div>` : `<span style="font-size:13px;color:#ccc;">›</span>`}
       </button>`;
     });
-    h+=`</div>`;
+    h += `</div>`;
     return h;
   }
 
-  // ── 화면: PIN 입력 (키패드) ──
-  function renderPin(){
-    const v=ROLES[curRole];
-    const dots=Array.from({length:4},(_,i)=>
-      `<div style="width:18px;height:18px;border-radius:50%;${i<pinInput.length?`background:${v.dot};border:2px solid ${v.dot};`:`border:2px solid #ccc;background:transparent;`}"></div>`
+  function noticeCard(n, borderColor) {
+    const LIMIT = 100;
+    const short = n.content.length > LIMIT;
+    const preview = short ? n.content.slice(0, LIMIT) + '…' : n.content;
+    return `<div style="background:#fff;border:0.5px solid ${borderColor};border-radius:10px;padding:10px 12px;margin-bottom:6px;">
+      ${n.title ? `<div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:3px;">${esc(n.title)}</div>` : ''}
+      <div id="nc-${n.id}" style="font-size:12px;color:#333;line-height:1.6;white-space:pre-wrap;">${esc(preview)}</div>
+      ${short ? `<button data-expand="${n.id}" data-full="${esc(n.content)}" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;padding:2px 0;margin-top:2px;">더보기 ▼</button>` : ''}
+      <div style="font-size:10px;color:#bbb;margin-top:4px;">${fmt(n.createdAt)}</div>
+    </div>`;
+  }
+
+  function renderPin() {
+    const v = ROLES[curRole];
+    const dots = Array.from({length:4}, (_, i) =>
+      `<div style="width:16px;height:16px;border-radius:50%;border:2px solid #ccc;background:${i < pinInput.length ? '#1a1a1a' : 'transparent'};"></div>`
     ).join('');
-    const keys=['1','2','3','4','5','6','7','8','9','←','0','✓'];
-    const keyBtns=keys.map(k=>{
-      const isAction=k==='←'||k==='✓';
-      const isEnter=k==='✓';
-      return `<button data-pin-key="${k}" style="height:64px;border-radius:14px;border:0.5px solid #e0e0e0;background:${isEnter?'#1a1a1a':'#fff'};color:${isEnter?'#fff':'#1a1a1a'};font-size:${isAction?'18px':'20px'};font-weight:${isAction?'400':'500'};cursor:pointer;touch-action:manipulation;">${k}</button>`;
-    }).join('');
-    return `<div style="padding:0.5rem 0 1.5rem;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:32px;">
-        <button data-bd-back style="border:none;background:none;cursor:pointer;font-size:18px;color:#aaa;padding:0;line-height:1;">←</button>
+    const keys = ['1','2','3','4','5','6','7','8','9','←','0','✓'];
+    return `<div style="padding:.5rem 0 1.5rem;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
+        <button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
       </div>
-      <div style="text-align:center;margin-bottom:8px;">
-        <div style="width:52px;height:52px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:${v.tx};margin:0 auto 12px;">${v.init}</div>
+      <div style="text-align:center;margin-bottom:28px;">
+        <div style="width:52px;height:52px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:${v.tx};margin:0 auto 10px;">${v.init}</div>
         <div style="font-size:15px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">${v.l}</div>
-        <div style="font-size:12px;color:#888;margin-bottom:28px;">4자리 PIN을 입력해 주세요</div>
-        <div style="display:flex;justify-content:center;gap:20px;margin-bottom:36px;">${dots}</div>
+        <div style="font-size:12px;color:#888;margin-bottom:24px;">4자리 PIN 입력</div>
+        <div style="display:flex;justify-content:center;gap:18px;">${dots}</div>
       </div>
-      <div id="pin-err" style="text-align:center;font-size:12px;color:#EF4444;min-height:18px;margin-bottom:12px;"></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:280px;margin:0 auto;">${keyBtns}</div>
+      <div id="pin-err" style="text-align:center;font-size:12px;color:#EF4444;min-height:18px;margin-bottom:10px;"></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:260px;margin:0 auto;">
+        ${keys.map(k => {
+          const isEnter = k === '✓', isDel = k === '←';
+          return `<button data-key="${esc(k)}" style="height:62px;border-radius:12px;border:0.5px solid #e0e0e0;background:${isEnter?'#1a1a1a':'#fff'};color:${isEnter?'#fff':'#1a1a1a'};font-size:${isDel||isEnter?'18px':'20px'};font-weight:${isDel||isEnter?'400':'500'};cursor:pointer;touch-action:manipulation;">${k}</button>`;
+        }).join('')}
+      </div>
     </div>`;
   }
 
-  // ── 화면: 수신함 ──
-  function renderInbox(){
-    const ib=inbox(curRole);
-    const unrd=ib.filter(m=>mySt(m,curRole)==='unread').sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-    const rd=ib.filter(m=>mySt(m,curRole)==='read').sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-    const dn=ib.filter(m=>mySt(m,curRole)==='done').sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-    let h=`<div style="padding:0.5rem 0 1.5rem;">${roleHdr()}${tabRow('inbox')}`;
-    if(!ib.length) h+=`<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">새로운 메시지가 없습니다.</div>`;
-    else {
-      if(unrd.length){ h+=`<div style="font-size:10px;font-weight:500;color:#3B82F6;letter-spacing:.06em;margin-bottom:8px;">미확인 · ${unrd.length}건</div>`; unrd.forEach(m=>h+=msgCard(m,'unread')); }
-      if(rd.length){ h+=`<div style="font-size:10px;font-weight:500;color:#B45309;letter-spacing:.06em;margin:${unrd.length?'18px':'0'} 0 8px;">확인함 (미처리) · ${rd.length}건</div>`; rd.forEach(m=>h+=msgCard(m,'read')); }
-      if(dn.length){ h+=`<div style="font-size:10px;font-weight:500;color:#bbb;letter-spacing:.06em;margin:${(unrd.length||rd.length)?'18px':'0'} 0 8px;">처리완료 · ${dn.length}건</div>`; dn.slice(0,20).forEach(m=>h+=msgCard(m,'done')); }
-    }
-    h+=`</div>`;
-    return h;
-  }
+  function renderInbox() {
+    const ib = msgs.filter(m => mySt(m) !== null && m.from !== curRole);
+    const unrd = ib.filter(m => mySt(m) === 'unread').sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
+    const rd   = ib.filter(m => mySt(m) === 'read').sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
+    const dn   = ib.filter(m => mySt(m) === 'done').sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
+    const v = ROLES[curRole];
 
-  function msgCard(m,st){
-    const isUnread=st==='unread',isDone=st==='done';
-    const rf=ROLES[m.from]||{bg:'#f5f6f7',tx:'#333',l:m.from};
-    const tp=TYPES[m.type]||{bg:'#f5f6f7',tx:'#333',l:m.type};
-    const toLabel=m.to==='all'?'전체':(m.to==='leader'?'팀장님':(ROLES[m.to]?ROLES[m.to].l:m.to));
-    return `<div style="background:${isUnread?'#F8FBFF':'#fff'};border:${isUnread?'1px solid #BFDBFE':'0.5px solid #e8e8e8'};border-radius:12px;padding:12px 14px;margin-bottom:8px;${isDone?'opacity:.45;':''}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:8px;">
-        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${bdg(rf.bg,rf.tx,rf.l)}<span style="font-size:11px;color:#bbb;">→ ${toLabel}</span>${bdg(tp.bg,tp.tx,tp.l)}${isUnread?'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:20px;background:#3B82F6;color:#fff;">New</span>':''}</div>
-        <span style="font-size:11px;color:#bbb;flex-shrink:0;white-space:nowrap;">${fmt(m.createdAt)}</span>
-      </div>
-      <p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ${isDone?'0':'8px'};font-weight:${isUnread?500:400};white-space:pre-wrap;">${esc(m.content)}</p>
-      ${!isDone?`<div style="display:flex;justify-content:flex-end;"><button data-bd-done="${m.id}" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#F0FDF4;color:#15803D;border:0.5px solid #86EFAC;cursor:pointer;font-weight:500;">처리완료</button></div>`:`<div style="font-size:10px;color:#bbb;text-align:right;margin-top:4px;">✓ 처리완료</div>`}
-    </div>`;
-  }
-
-  // ── 화면: 발신함 ──
-  function renderSent(){
-    const sent=msgs.filter(m=>m.from===curRole).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
-    const stC={done:'background:#F0FDF4;color:#15803D',read:'background:#FFFBEB;color:#B45309',unread:'background:#FEF2F2;color:#B91C1C'};
-    const stL={done:'✓ 처리완료',read:'○ 확인함',unread:'● 미확인'};
-    let h=`<div style="padding:0.5rem 0 1.5rem;">${roleHdr()}${tabRow('sent')}`;
-    if(!sent.length) h+=`<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">보낸 메시지가 없습니다.</div>`;
-    else sent.forEach(m=>{
-      const tp=TYPES[m.type]||{bg:'#f5f6f7',tx:'#333',l:m.type};
-      const toLabel=m.to==='all'?'전체 매니저님':(m.to==='leader'?'팀장님':(ROLES[m.to]?ROLES[m.to].l:m.to));
-      const rList=m.to==='leader'?[]:rcpts(m.to).filter(r=>r!==curRole);
-      h+=`<div style="background:#fff;border:0.5px solid #e8e8e8;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
-          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${bdg(tp.bg,tp.tx,tp.l)}<span style="font-size:11px;color:#bbb;">→ ${toLabel}</span></div>
-          <span style="font-size:11px;color:#bbb;flex-shrink:0;">${fmt(m.createdAt)}</span>
+    let h = `<div style="padding:.5rem 0 1.5rem;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+          <div style="width:32px;height:32px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:${v.tx};">${v.init}</div>
+          <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l}</div>
         </div>
-        <p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ${rList.length?'8px':'0'};white-space:pre-wrap;">${esc(m.content)}</p>
-        ${rList.length?`<div style="display:flex;gap:5px;flex-wrap:wrap;">${rList.map(r=>{const st=m.status&&m.status[r]?m.status[r]:'unread';return`<span style="font-size:10px;padding:2px 8px;border-radius:4px;${stC[st]||stC.unread};">${ROLES[r]?ROLES[r].l:r} ${stL[st]||stL.unread}</span>`;}).join('')}</div>`:'<div style="font-size:10px;color:#bbb;">팀장님께 전달됨</div>'}
+        <button data-view="compose" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>
+      </div>
+      <div style="display:flex;border-bottom:0.5px solid #ddd;margin-bottom:14px;">
+        <button data-view="inbox" style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:500;color:#1a1a1a;border-bottom:2px solid #1a1a1a;">수신함</button>
+        <button data-view="sent"  style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:400;color:#888;border-bottom:2px solid transparent;">발신함</button>
       </div>`;
-    });
-    h+=`</div>`;
+
+    if (!ib.length) {
+      h += `<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">새로운 메시지가 없습니다.</div>`;
+    } else {
+      if (unrd.length) { h += sec('미확인', unrd.length, '#3B82F6'); unrd.forEach(m => h += msgCard(m, 'unread')); }
+      if (rd.length)   { h += sec('확인함 (미처리)', rd.length, '#B45309', !!(unrd.length)); rd.forEach(m => h += msgCard(m, 'read')); }
+      if (dn.length)   { h += sec('처리완료', dn.length, '#bbb', !!(unrd.length||rd.length)); dn.slice(0,20).forEach(m => h += msgCard(m, 'done')); }
+    }
+    h += `</div>`;
     return h;
   }
 
-  // ── 화면: 작성 ──
-  function renderCompose(){
-    const v=ROLES[curRole];
-    const others=Object.keys(ROLES).filter(k=>k!==curRole);
-    return `<div style="padding:0.5rem 0 1.5rem;">
+  function renderSent() {
+    const sent = msgs.filter(m => m.from === curRole).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
+    const stC = { done:'background:#F0FDF4;color:#15803D', read:'background:#FFFBEB;color:#B45309', unread:'background:#FEF2F2;color:#B91C1C' };
+    const stL = { done:'✓ 처리완료', read:'○ 확인함', unread:'● 미확인' };
+    const v = ROLES[curRole];
+
+    let h = `<div style="padding:.5rem 0 1.5rem;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+          <div style="width:32px;height:32px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:${v.tx};">${v.init}</div>
+          <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l}</div>
+        </div>
+        <button data-view="compose" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>
+      </div>
+      <div style="display:flex;border-bottom:0.5px solid #ddd;margin-bottom:14px;">
+        <button data-view="inbox" style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:400;color:#888;border-bottom:2px solid transparent;">수신함</button>
+        <button data-view="sent"  style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:500;color:#1a1a1a;border-bottom:2px solid #1a1a1a;">발신함</button>
+      </div>`;
+
+    if (!sent.length) {
+      h += `<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">보낸 메시지가 없습니다.</div>`;
+    } else {
+      sent.forEach(m => {
+        const tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
+        const toL = m.to === 'all' ? '전체 매니저님' : m.to === 'leader' ? '팀장님' : (ROLES[m.to] ? ROLES[m.to].l : m.to);
+        const rList = m.to === 'leader' ? [] : rcpts(m.to).filter(r => r !== curRole);
+        h += `<div style="background:#fff;border:0.5px solid #e8e8e8;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${bdg(tp.bg,tp.tx,tp.l)}<span style="font-size:11px;color:#bbb;">→ ${esc(toL)}</span></div>
+            <span style="font-size:11px;color:#bbb;flex-shrink:0;">${fmt(m.createdAt)}</span>
+          </div>
+          <p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ${rList.length?'8px':'0'};white-space:pre-wrap;">${esc(m.content)}</p>
+          ${rList.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;">${rList.map(r => { const st = m.status&&m.status[r]?m.status[r]:'unread'; return `<span style="font-size:10px;padding:2px 8px;border-radius:4px;${stC[st]||stC.unread};">${ROLES[r]?ROLES[r].l:r} ${stL[st]||stL.unread}</span>`; }).join('')}</div>` : `<div style="font-size:10px;color:#bbb;">팀장님께 전달됨</div>`}
+        </div>`;
+      });
+    }
+    h += `</div>`;
+    return h;
+  }
+
+  function renderCompose() {
+    const v = ROLES[curRole];
+    const others = Object.keys(ROLES).filter(k => k !== curRole);
+    return `<div style="padding:.5rem 0 1.5rem;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
-        <button data-bd-view="inbox" style="border:none;background:none;cursor:pointer;font-size:18px;color:#aaa;padding:0;line-height:1;">←</button>
+        <button data-view="inbox" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
         <div style="font-size:14px;font-weight:500;color:#1a1a1a;">새 메시지 작성</div>
       </div>
       <div style="margin-bottom:12px;">
         <div style="font-size:10px;color:#888;margin-bottom:4px;">보내는 사람</div>
         <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:#f5f6f7;border:0.5px solid #e0e0e0;">
           <div style="width:26px;height:26px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:${v.tx};">${v.init}</div>
-          <span style="font-size:13px;color:#1a1a1a;">${v.l}</span>
+          <span style="font-size:13px;">${v.l}</span>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div>
           <div style="font-size:10px;color:#888;margin-bottom:4px;">유형</div>
-          <select id="bd-type" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">
+          <select id="comp-type" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">
             <option value="handover">전달사항</option><option value="caution">주의사항</option>
           </select>
         </div>
         <div>
           <div style="font-size:10px;color:#888;margin-bottom:4px;">받는 사람</div>
-          <select id="bd-to" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">
-            ${others.map(k=>`<option value="${k}">${ROLES[k].l}</option>`).join('')}
+          <select id="comp-to" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">
+            ${others.map(k => `<option value="${k}">${ROLES[k].l}</option>`).join('')}
             <option value="all">전체 매니저님</option>
             <option value="leader">팀장님께</option>
           </select>
@@ -2247,129 +2211,159 @@ function initBoard() {
       </div>
       <div style="margin-bottom:16px;">
         <div style="font-size:10px;color:#888;margin-bottom:4px;">내용</div>
-        <textarea id="bd-content" placeholder="메시지 내용을 입력하세요..." style="width:100%;padding:10px 12px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;resize:vertical;min-height:120px;font-family:inherit;line-height:1.6;box-sizing:border-box;"></textarea>
+        <textarea id="comp-content" placeholder="메시지를 입력하세요..." style="width:100%;padding:10px 12px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;resize:vertical;min-height:120px;font-family:inherit;line-height:1.6;box-sizing:border-box;"></textarea>
       </div>
-      <button id="bd-send" style="width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">전송하기</button>
+      <button id="btn-send" style="width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">전송하기</button>
     </div>`;
   }
 
-  // ── 렌더 ──
-  function render(){
-    const root=document.getElementById('board-root');
-    if(!root) return;
-    if(!curRole)              root.innerHTML=renderHome();
-    else if(!pinVerified)     root.innerHTML=renderPin();
-    else if(curView==='compose') root.innerHTML=renderCompose();
-    else if(curView==='sent')    root.innerHTML=renderSent();
-    else                         root.innerHTML=renderInbox();
-    bind();
+  // ── 헬퍼 ──
+  function mySt(m) { return m.status && m.status[curRole] != null ? m.status[curRole] : null; }
+  function rcpts(to) { return to === 'all' ? ALL : (ALL.includes(to) ? [to] : []); }
+  function sec(label, count, color, mt) {
+    return `<div style="font-size:10px;font-weight:500;color:${color};letter-spacing:.06em;margin:${mt?'18px':'0'} 0 8px;">${label} · ${count}건</div>`;
+  }
+  function msgCard(m, st) {
+    const isU = st === 'unread', isDone = st === 'done';
+    const rf = ROLES[m.from] || { bg:'#f5f6f7', tx:'#333', l:m.from };
+    const tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
+    const toL = m.to==='all'?'전체': m.to==='leader'?'팀장님': ROLES[m.to]?ROLES[m.to].l : m.to;
+    return `<div style="background:${isU?'#F8FBFF':'#fff'};border:${isU?'1px solid #BFDBFE':'0.5px solid #e8e8e8'};border-radius:12px;padding:12px 14px;margin-bottom:8px;${isDone?'opacity:.45;':''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:8px;">
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+          ${bdg(rf.bg,rf.tx,rf.l)}<span style="font-size:11px;color:#bbb;">→ ${esc(toL)}</span>${bdg(tp.bg,tp.tx,tp.l)}
+          ${isU?'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:20px;background:#3B82F6;color:#fff;">New</span>':''}
+        </div>
+        <span style="font-size:11px;color:#bbb;flex-shrink:0;white-space:nowrap;">${fmt(m.createdAt)}</span>
+      </div>
+      <p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ${isDone?'0':'8px'};font-weight:${isU?500:400};white-space:pre-wrap;">${esc(m.content)}</p>
+      ${!isDone ? `<div style="display:flex;justify-content:flex-end;"><button data-done="${m.id}" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#F0FDF4;color:#15803D;border:0.5px solid #86EFAC;cursor:pointer;font-weight:500;">처리완료</button></div>` : `<div style="font-size:10px;color:#bbb;text-align:right;margin-top:4px;">✓ 처리완료</div>`}
+    </div>`;
   }
 
-  // ── 바인딩 ──
-  function bind(){
-    const root=document.getElementById('board-root');
-    if(!root) return;
+  // ── 메인 렌더 ──
+  function render() {
+    const root = document.getElementById('board-root');
+    if (!root) return;
+    if (!curRole)         root.innerHTML = renderHome();
+    else if (!pinOK)      root.innerHTML = renderPin();
+    else if (view==='sent')    root.innerHTML = renderSent();
+    else if (view==='compose') root.innerHTML = renderCompose();
+    else                       root.innerHTML = renderInbox();
+    bindEvents();
+  }
 
-    // 공고 접기/펼치기
-    root.querySelectorAll('[data-ni]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        const id=btn.dataset.ni,el=document.getElementById('ni-c-'+id),full=_nc[id]||'';
-        if(!el) return;
-        if(btn.textContent.indexOf('더보기')>=0){ el.textContent=full; btn.textContent='접기 ▲'; }
-        else{ el.textContent=full.slice(0,120)+'…'; btn.textContent='더보기 ▼'; }
+  function bindEvents() {
+    const root = document.getElementById('board-root');
+    if (!root) return;
+
+    // 공고 더보기
+    root.querySelectorAll('[data-expand]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const el = document.getElementById('nc-' + btn.dataset.expand);
+        if (!el) return;
+        if (btn.textContent.includes('더보기')) {
+          el.textContent = btn.dataset.full;
+          btn.textContent = '접기 ▲';
+        } else {
+          el.textContent = btn.dataset.full.slice(0, 100) + '…';
+          btn.textContent = '더보기 ▼';
+        }
       });
     });
 
     // 역할 선택
-    root.querySelectorAll('[data-bd-login]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        curRole=btn.dataset.bdLogin; pinVerified=false; pinInput=''; render();
+    root.querySelectorAll('[data-role]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        curRole = btn.dataset.role; pinOK = false; pinInput = ''; render();
       });
     });
 
-    // 뒤로 (로그아웃)
-    root.querySelector('[data-bd-logout]')?.addEventListener('click',()=>{ curRole=null; pinVerified=false; pinInput=''; render(); });
-    root.querySelector('[data-bd-back]')?.addEventListener('click',()=>{ curRole=null; pinVerified=false; pinInput=''; render(); });
-
-    // PIN 키패드
-    root.querySelectorAll('[data-pin-key]').forEach(btn=>{
-      btn.addEventListener('click',async ()=>{
-        const k=btn.dataset.pinKey;
-        const errEl=root.querySelector('#pin-err');
-        if(k==='←'){ pinInput=pinInput.slice(0,-1); render(); }
-        else if(k==='✓'){
-          if(pinInput.length!==4){ if(errEl) errEl.textContent='4자리를 모두 입력해 주세요.'; return; }
-          const ok=await verifyPin(pinInput,curRole);
-          if(ok){
-            pinVerified=true;
-            // 미확인 → 확인함 전환
-            msgs=msgs.map(m=>{
-              if(m.status&&m.status[curRole]==='unread'){ const s={...m.status}; s[curRole]='read'; return {...m,status:s}; }
-              return m;
-            });
-            bSave(); curView='inbox'; render();
-          } else {
-            pinInput=''; render();
-            setTimeout(()=>{ const e=document.querySelector('#pin-err'); if(e) e.textContent='PIN이 올바르지 않습니다.'; },50);
-          }
-        } else if(pinInput.length<4){ pinInput+=k; render(); }
+    // 뒤로
+    root.querySelectorAll('[data-back]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!pinOK) { curRole = null; pinInput = ''; }
+        else { curRole = null; pinOK = false; }
+        view = 'home'; render();
       });
     });
 
     // 뷰 전환
-    root.querySelectorAll('[data-bd-view]').forEach(btn=>btn.addEventListener('click',()=>{ curView=btn.dataset.bdView; render(); }));
-    root.querySelector('[data-bd-compose]')?.addEventListener('click',()=>{ curView='compose'; render(); });
+    root.querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => { view = btn.dataset.view; render(); });
+    });
+
+    // PIN 키패드
+    root.querySelectorAll('[data-key]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const k = btn.dataset.key;
+        const errEl = root.querySelector('#pin-err');
+        if (k === '←') { pinInput = pinInput.slice(0, -1); render(); }
+        else if (k === '✓') {
+          if (pinInput.length !== 4) { if (errEl) errEl.textContent = '4자리를 입력해 주세요.'; return; }
+          const ok = await checkPin(pinInput, curRole);
+          if (ok) {
+            pinOK = true; view = 'inbox';
+            // 미확인 → 확인함
+            msgs = msgs.map(m => {
+              if (m.status && m.status[curRole] === 'unread' && m.from !== curRole) {
+                const s = { ...m.status }; s[curRole] = 'read';
+                return { ...m, status: s };
+              }
+              return m;
+            });
+            saveMsgs(msgs); render();
+          } else {
+            pinInput = ''; render();
+            setTimeout(() => { const e = root.querySelector('#pin-err'); if (e) e.textContent = 'PIN이 올바르지 않습니다.'; }, 30);
+          }
+        } else if (pinInput.length < 4) { pinInput += k; render(); }
+      });
+    });
 
     // 전송
-    root.querySelector('#bd-send')?.addEventListener('click',()=>{
-      const content=(root.querySelector('#bd-content')||{value:''}).value.trim();
-      if(!content||!curRole) return;
-      const to=(root.querySelector('#bd-to')||{value:'all'}).value;
-      const type=(root.querySelector('#bd-type')||{value:'handover'}).value;
-      const rList=rcpts(to); const status={};
-      ALL.forEach(r=>{ status[r]=rList.indexOf(r)>=0?'unread':null; });
-      msgs=[{id:Date.now()+'',type,from:curRole,to,content,createdAt:new Date().toISOString(),status},...msgs];
-      bSave(); curView='inbox'; render();
+    root.querySelector('#btn-send')?.addEventListener('click', () => {
+      const content = (root.querySelector('#comp-content') || {value:''}).value.trim();
+      if (!content || !curRole) return;
+      const to   = (root.querySelector('#comp-to')   || {value:'all'}).value;
+      const type = (root.querySelector('#comp-type') || {value:'handover'}).value;
+      const rList = rcpts(to);
+      const status = {};
+      ALL.forEach(r => { status[r] = rList.includes(r) ? 'unread' : null; });
+      msgs = [{ id: Date.now()+'', type, from: curRole, to, content, createdAt: new Date().toISOString(), status }, ...msgs];
+      saveMsgs(msgs); view = 'inbox'; render();
     });
 
     // 처리완료
-    root.querySelectorAll('[data-bd-done]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        if(!curRole) return;
-        const id=btn.dataset.bdDone;
-        msgs=msgs.map(m=>{ if(m.id===id){ const s={...m.status}; s[curRole]='done'; return {...m,status:s}; } return m; });
-        bSave(); render();
+    root.querySelectorAll('[data-done]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.done;
+        msgs = msgs.map(m => {
+          if (m.id === id) { const s = { ...m.status }; s[curRole] = 'done'; return { ...m, status: s }; }
+          return m;
+        });
+        saveMsgs(msgs); render();
       });
     });
   }
 
   // ── 초기화 ──
-  async function init(){
-    const root=document.getElementById('board-root');
-    if(!root) return;
-    root.innerHTML=`<div style="text-align:center;padding:60px 0;color:#bbb;"><div style="font-size:22px;margin-bottom:10px;">☁</div><div style="font-size:13px;">구글 시트 연결 중...</div></div>`;
-    await loadAll();
-    const syncFailed = !msgs.length && !loadLocal(MKEY,[]).length;
+  async function init() {
+    const root = document.getElementById('board-root');
+    if (!root) return;
+
+    // localStorage 먼저 표시 (즉시)
+    msgs = localMsgs(); notices = localNotices(); settings = localSettings();
+    if (!settings.pins) settings.pins = {};
     render();
-    // 동기화 실패 시 상단에 경고 표시
-    if(syncFailed){
-      const root2=document.getElementById('board-root');
-      if(root2){
-        const warn=document.createElement('div');
-        warn.style.cssText='background:#FEF2F2;border:0.5px solid #FECACA;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#B91C1C;';
-        warn.textContent='⚠ 구글 시트 연결 실패 — 저장된 데이터가 없거나 GAS URL을 확인해 주세요.';
-        root2.prepend(warn);
-      }
-    }
+
+    // 백그라운드로 GAS 동기화
+    syncFromGAS().then(() => render());
   }
 
-  window._pabBoardRender = ()=>{ loadAll().then(()=>render()); };
+  window._boardRefresh = () => syncFromGAS().then(() => render());
   init();
 }
-
-
-
-
 
 </script>
 </body>
