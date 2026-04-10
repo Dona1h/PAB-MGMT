@@ -38,18 +38,16 @@
   @media (max-width:480px) { .price-wrap { padding: 8px; } }
   .wrap { padding: 0.5rem 0 1.5rem; display: flex; flex-direction: column; gap: 12px; }
   .box { border: 0.5px solid #ccc; border-radius: 12px; overflow: visible; }
-  .box-head { border-radius: 12px 12px 0 0; }
   .box-head { background: #f7f8fa; padding: 8px 14px; font-size: 12px; font-weight: 500; color: #1a1a1a; border-bottom: 0.5px solid #e0e0e0; display: flex; align-items: center; gap: 8px; }
   .box-badge { font-size: 10px; font-weight: 400; color: #888; }
   .badge-warn { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #fff3cd; color: #856404; }
 
-  .t { width: 100%; border-collapse: collapse; min-width: 540px; }
+  .t { width: 100%; border-collapse: collapse; }
   .t th { font-size: 10px; font-weight: 500; color: #888; padding: 6px 8px; text-align: center; border-bottom: 0.5px solid #e0e0e0; background: #fff; }
-  .t th:first-child { text-align: left; padding-left: 14px; width: 120px; min-width: 120px; }
+  .t th:first-child { text-align: left; padding-left: 14px; width: 160px; }
   .t td { padding: 9px 6px; text-align: center; border-bottom: 0.5px solid #ebebeb; vertical-align: top; min-width: 72px; }
   .t td:first-child { text-align: left; padding-left: 14px; }
   .t tr:last-child td { border-bottom: none; }
-  .t-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 0 0 12px 12px; }
   .sub-head td { background: #f7f8fa; font-size: 10px; font-weight: 500; color: #888; padding: 4px 8px 4px 14px; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 0.5px solid #e0e0e0; }
 
   .prog-name { font-size: 13px; color: #1a1a1a; }
@@ -98,7 +96,7 @@
   <button class="tab-btn" data-tab="kids">🧒 키즈 회차계산기</button>
   <button class="tab-btn" data-tab="refund">💸 환불 계산기</button>
   <button class="tab-btn" data-tab="change">🔄 반변경 계산기</button>
-  <button class="tab-btn" data-tab="board">📌 포스트잇</button>
+  <button class="tab-btn" data-tab="board" id="tab-board-btn" style="display:none;">📌 포스트잇</button>
 </div>
 
 <!-- Tab 1: 가격표 -->
@@ -109,7 +107,7 @@
   <!-- ① 성인수영 -->
   <div class="box">
     <div class="box-head">성인 수영 <span class="box-badge">기간제 · 30일 기준 일할계산</span></div>
-    <div class="t-scroll"><table class="t">
+    <table class="t">
       <thead>
         <tr>
           <th>프로그램</th>
@@ -148,7 +146,7 @@
           <td><div class="p-best">264,000</div><div class="p-best-mo">월 88,000</div></td>
         </tr>
       </tbody>
-    </table></div>
+    </table>
     <div class="foot-note">※ 14시 성인수영 <span class="tag-exc">3개월 중복 불가</span> &nbsp;·&nbsp; 8–11시 + 3개월 중복 최대 −20%</div>
   </div>
 
@@ -194,7 +192,7 @@
   <!-- ③ 아쿠아로빅 -->
   <div class="box">
     <div class="box-head">아쿠아로빅 <span class="box-badge">기간제 · 30일 기준 일할계산</span></div>
-    <div class="t-scroll"><table class="t">
+    <table class="t">
       <thead>
         <tr>
           <th>프로그램</th>
@@ -209,13 +207,13 @@
           <td><div class="p-3m">202,500</div><div class="p-3m-mo">월 67,500</div></td>
         </tr>
       </tbody>
-    </table></div>
+    </table>
   </div>
 
   <!-- ④ 키즈 -->
   <div class="box">
     <div class="box-head">키즈 수영 <span class="box-badge">횟수제 · 3개월 10% 할인 적용</span></div>
-    <div class="t-scroll"><table class="t">
+    <table class="t">
       <thead>
         <tr>
           <th>프로그램</th>
@@ -249,7 +247,7 @@
           </td>
         </tr>
       </tbody>
-    </table></div>
+    </table>
     <div class="foot-note">※ 키즈는 타임할인 없음 · 3개월 실수업 횟수는 등록 시점에 따라 산정</div>
   </div>
 
@@ -283,85 +281,749 @@
 </div>
 
 <script>
-// ================================================================
-// PAB GAS 통신 레이어 v2 — JSONP + GET write
-// CORS 문제 구조적 해결
-// ================================================================
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbyNLkDCamf5aHMGaEJ7WHLktmGnzohicoeu2I77LwWgaQEqugbLrNBLAIygFX2sgrkd/exec';
-const GAS_TOKEN = 'pab2024';
 
-// ── JSONP 읽기 (CORS 완전 우회) ──
+// =============================================================
+// GAS 통신 레이어 (JSONP + script GET)
+// =============================================================
+var GAS_URL   = 'https://script.google.com/macros/s/AKfycbw-bGN4TQDrVHS1D9LlH7ZTqJ8cjvkDjkjAmkeIOIivkuv7PmTfhqLWBg6cTP1XfuYb/exec';
+var GAS_TOKEN = 'pab2024';
+
 function gasRead(action) {
   return new Promise(function(resolve) {
-    const cbName = '_pab_' + action + '_' + Date.now();
-    const timer = setTimeout(function() {
+    var cbName = '_pab_' + action.replace(/\W/g,'') + '_' + Date.now();
+    var timer = setTimeout(function() {
       delete window[cbName];
-      const el = document.getElementById(cbName);
+      var el = document.getElementById(cbName);
       if (el) el.remove();
-      console.warn('[GAS] timeout:', action);
       resolve(null);
     }, 8000);
-
     window[cbName] = function(data) {
       clearTimeout(timer);
       delete window[cbName];
-      const el = document.getElementById(cbName);
+      var el = document.getElementById(cbName);
       if (el) el.remove();
       resolve(data && data.ok ? data.data : null);
     };
-
-    const script = document.createElement('script');
+    var script = document.createElement('script');
     script.id  = cbName;
     script.src = GAS_URL + '?token=' + GAS_TOKEN + '&action=' + action + '&callback=' + cbName + '&_=' + Date.now();
     script.onerror = function() {
       clearTimeout(timer);
       delete window[cbName];
       script.remove();
-      console.warn('[GAS] script error:', action);
       resolve(null);
     };
     document.head.appendChild(script);
   });
 }
 
-// ── GET 쓰기 (payload 파라미터, CORS 없음) ──
 function gasWrite(action, data) {
   try {
-    const payload = encodeURIComponent(JSON.stringify(data));
-    const MAX = 7000;
-    if (payload.length > MAX) {
-      // 데이터가 크면 최근 30건만 잘라서 저장
-      if (Array.isArray(data)) {
-        gasWrite(action, data.slice(0, 30));
-      }
-      return;
-    }
-    const url = GAS_URL + '?token=' + GAS_TOKEN + '&action=' + action + '&payload=' + payload + '&_=' + Date.now();
-    // script 태그로 GET 요청 (CORS 없음, 응답은 무시)
-    const script = document.createElement('script');
-    script.src = url;
+    var d = (action === 'saveMsgs' && Array.isArray(data)) ? data.slice(0, 30) : data;
+    var payload = encodeURIComponent(JSON.stringify(d));
+    if (payload.length > 7000) return;
+    var script = document.createElement('script');
+    script.src = GAS_URL + '?token=' + GAS_TOKEN + '&action=' + action + '&payload=' + payload + '&_=' + Date.now();
     script.onload = script.onerror = function() { script.remove(); };
     document.head.appendChild(script);
-  } catch(e) {
-    console.warn('[GAS] write error:', e);
-  }
+  } catch(e) {}
 }
 
-// ── localStorage 헬퍼 ──
 function ls_get(k, def) {
-  try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; }
-  catch(e) { return def; }
+  try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch(e) { return def; }
 }
 function ls_set(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {}
 }
 
-// ── 핑 테스트 (브라우저 콘솔에서 확인용) ──
-function gasPing() {
-  gasRead('ping').then(function(r) {
-    console.log('[GAS ping]', r ? 'OK ✅ ts=' + r : '실패 ❌ — GAS URL 또는 배포 설정 확인');
+// =============================================================
+// PIN 잠금 시스템
+// =============================================================
+var PIN_SALT = 'pab_pin_salt_2025';
+var MAX_FAILS = 5, LOCK_SECS = 30;
+window.appState = { mode: null, role: null };
+
+function getPinFails()  { return parseInt(sessionStorage.getItem('pab-pf') || '0'); }
+function setPinFails(n) { sessionStorage.setItem('pab-pf', n); }
+function getLockUntil() { return parseInt(sessionStorage.getItem('pab-pl') || '0'); }
+function setLockUntil(t){ sessionStorage.setItem('pab-pl', t); }
+function isLocked()     { return Date.now() < getLockUntil(); }
+function remainSecs()   { return Math.ceil((getLockUntil() - Date.now()) / 1000); }
+
+function sha256pin(pin) {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin + PIN_SALT))
+    .then(function(buf) {
+      return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+    });
+}
+function matchPin(pin, hash) {
+  if (!hash) return Promise.resolve(false);
+  return sha256pin(pin).then(function(h){ return h === hash; });
+}
+function resolvePin(pin, settings) {
+  if (!settings) return Promise.resolve(null);
+  var roles = ['morning','afternoon','evening'];
+  return matchPin(pin, settings.guestPin || '').then(function(g) {
+    if (g) return { mode: 'guest', role: null };
+    var idx = 0;
+    function next() {
+      if (idx >= roles.length) return Promise.resolve(null);
+      var r = roles[idx++];
+      return matchPin(pin, (settings.pins && settings.pins[r]) || '').then(function(ok) {
+        if (ok) return { mode: 'manager', role: r };
+        return next();
+      });
+    }
+    return next();
   });
 }
+
+function updateTabBar() {
+  var btn = document.getElementById('tab-board-btn');
+  if (!btn) return;
+  btn.style.display = (window.appState.mode === 'manager') ? '' : 'none';
+  var lockBtn = document.getElementById('app-lock-btn');
+  if (lockBtn) lockBtn.style.display = '';
+}
+
+function insertLockButton() {
+  if (document.getElementById('app-lock-btn')) return;
+  var tabBar = document.querySelector('.tab-bar');
+  if (!tabBar) return;
+  var btn = document.createElement('button');
+  btn.id = 'app-lock-btn';
+  btn.textContent = '🔒';
+  btn.style.cssText = 'border:none;background:none;cursor:pointer;font-size:14px;padding:14px 10px;display:none;';
+  btn.addEventListener('click', function() {
+    window.appState = { mode: null, role: null };
+    window._boardRoleOverride = null;
+    updateTabBar();
+    // 포스트잇 탭이 활성이면 가격표로 이동
+    if (document.getElementById('tab-board-btn').classList.contains('active')) {
+      document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+      var priceBtn = document.querySelector('.tab-btn[data-tab="price"]');
+      if (priceBtn) { priceBtn.classList.add('active'); document.getElementById('panel-price').classList.add('active'); }
+    }
+    showPinScreen();
+  });
+  tabBar.appendChild(btn);
+}
+
+function makePinKeypad(onKey) {
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:260px;';
+  ['1','2','3','4','5','6','7','8','9','←','0','✓'].forEach(function(k) {
+    var btn = document.createElement('button');
+    btn.textContent = k;
+    var isEnter = (k === '✓'), isDel = (k === '←');
+    btn.style.cssText = 'height:62px;border-radius:12px;border:0.5px solid #e0e0e0;' +
+      'background:' + (isEnter ? '#1a1a1a' : '#fff') + ';' +
+      'color:' + (isEnter ? '#fff' : '#1a1a1a') + ';' +
+      'font-size:' + (isDel || isEnter ? '18' : '20') + 'px;' +
+      'font-weight:' + (isDel || isEnter ? '400' : '500') + ';' +
+      'cursor:pointer;touch-action:manipulation;font-family:inherit;';
+    btn.addEventListener('click', function(){ onKey(k); });
+    wrap.appendChild(btn);
+  });
+  return wrap;
+}
+
+function makeDots(len) {
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;justify-content:center;gap:16px;margin-bottom:12px;';
+  for (var i = 0; i < 4; i++) {
+    var d = document.createElement('div');
+    d.style.cssText = 'width:16px;height:16px;border-radius:50%;border:2px solid #ccc;background:' + (i < len ? '#1a1a1a' : 'transparent') + ';transition:background .1s;';
+    wrap.appendChild(d);
+  }
+  return wrap;
+}
+
+function showToast(msg, ok) {
+  var el = document.createElement('div');
+  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;background:' + (ok===false?'#EF4444':'#1a1a1a') + ';color:#fff;pointer-events:none;';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(function(){ el.remove(); }, 2500);
+}
+
+function showPinScreen() {
+  var old = document.getElementById('app-pin-overlay');
+  if (old) old.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'app-pin-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#f5f6f7;z-index:9998;display:flex;flex-direction:column;align-items:center;padding:60px 20px 40px;box-sizing:border-box;overflow-y:auto;';
+
+  var settings = ls_get('pab-settings-v1', { pins:{}, guestPin:'', adminHash:'' });
+  var hasPins  = !!(settings.guestPin || Object.values(settings.pins||{}).some(function(v){ return !!v; }));
+  var pinInput = '';
+  var timerInterval = null;
+
+  function draw() {
+    while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+    // 헤더
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'text-align:center;margin-bottom:32px;';
+    hdr.innerHTML = '<div style="font-size:28px;margin-bottom:10px;">🏊</div>' +
+      '<div style="font-size:18px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">PAB 운영 도구</div>' +
+      '<div style="font-size:12px;color:#888;">PIN을 입력해 주세요</div>';
+    overlay.appendChild(hdr);
+
+    if (!hasPins) {
+      var msg = document.createElement('div');
+      msg.style.cssText = 'background:#FEF3C7;border:0.5px solid #FBBF24;border-radius:10px;padding:14px;text-align:center;font-size:13px;color:#92400E;max-width:280px;';
+      msg.textContent = '관리자(admin 페이지)에서 PIN을 먼저 설정해 주세요.';
+      overlay.appendChild(msg);
+      return;
+    }
+
+    if (isLocked()) {
+      var lockMsg = document.createElement('div');
+      lockMsg.style.cssText = 'background:#FEF2F2;border:0.5px solid #FECACA;border-radius:10px;padding:14px;text-align:center;font-size:13px;color:#B91C1C;max-width:280px;margin-bottom:16px;';
+      lockMsg.textContent = '잠금 중 — ' + remainSecs() + '초 후 시도하세요.';
+      overlay.appendChild(lockMsg);
+      timerInterval = setInterval(function() {
+        if (!isLocked()) { clearInterval(timerInterval); pinInput=''; draw(); return; }
+        lockMsg.textContent = '잠금 중 — ' + remainSecs() + '초 후 시도하세요.';
+      }, 500);
+      return;
+    }
+
+    overlay.appendChild(makeDots(pinInput.length));
+
+    var errDiv = document.createElement('div');
+    errDiv.id = 'pin-err';
+    errDiv.style.cssText = 'font-size:12px;color:#EF4444;min-height:18px;margin-bottom:12px;text-align:center;';
+    overlay.appendChild(errDiv);
+
+    overlay.appendChild(makePinKeypad(function(k) {
+      if (isLocked()) return;
+      var err = document.getElementById('pin-err');
+      if (k === '←') { pinInput = pinInput.slice(0, -1); draw(); return; }
+      if (k === '✓') {
+        if (pinInput.length !== 4) { if (err) err.textContent = '4자리를 입력해 주세요.'; return; }
+        resolvePin(pinInput, settings).then(function(result) {
+          if (result) {
+            setPinFails(0);
+            window.appState = result;
+            window._boardRoleOverride = (result.mode === 'manager') ? result.role : null;
+            overlay.remove();
+            updateTabBar();
+            insertLockButton();
+            if (result.mode === 'manager' && window._boardRefresh) window._boardRefresh();
+          } else {
+            var fails = getPinFails() + 1;
+            setPinFails(fails);
+            if (fails >= MAX_FAILS) { setLockUntil(Date.now() + LOCK_SECS * 1000); setPinFails(0); }
+            pinInput = '';
+            draw();
+            setTimeout(function() {
+              var e = document.getElementById('pin-err');
+              if (e) e.textContent = fails >= MAX_FAILS ? '5회 실패 — ' + LOCK_SECS + '초 잠금' : 'PIN이 올바르지 않습니다. (' + fails + '/5)';
+            }, 30);
+          }
+        });
+        return;
+      }
+      if (pinInput.length < 4) { pinInput += k; draw(); }
+    }));
+  }
+
+  draw();
+  document.body.appendChild(overlay);
+}
+
+function showPinChange(role) {
+  var ROLES_L = { morning:'오전 매니저님', afternoon:'오후 매니저님', evening:'저녁 매니저님' };
+  var roleLabel = ROLES_L[role] || role;
+  var settings = ls_get('pab-settings-v1', { pins:{}, guestPin:'', adminHash:'' });
+  var hasCurrent = !!(settings.pins && settings.pins[role]);
+  var steps = hasCurrent ? ['현재 PIN 확인','새 PIN 입력','새 PIN 확인'] : ['새 PIN 입력','새 PIN 확인'];
+  var step = 0, bufs = ['','',''], pinInput = '';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'app-pin-change';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#f5f6f7;z-index:9999;display:flex;flex-direction:column;align-items:center;padding:40px 20px;box-sizing:border-box;overflow-y:auto;';
+
+  function draw() {
+    while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+
+    var backWrap = document.createElement('div');
+    backWrap.style.cssText = 'width:100%;max-width:280px;margin-bottom:20px;';
+    var backBtn = document.createElement('button');
+    backBtn.textContent = '← 돌아가기';
+    backBtn.style.cssText = 'border:none;background:none;cursor:pointer;font-size:13px;color:#888;padding:0;';
+    backBtn.onclick = function() { overlay.remove(); };
+    backWrap.appendChild(backBtn);
+    overlay.appendChild(backWrap);
+
+    var info = document.createElement('div');
+    info.style.cssText = 'text-align:center;margin-bottom:20px;';
+    info.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">' + roleLabel + ' PIN ' + (hasCurrent ? '변경' : '설정') + '</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:3px;">단계 ' + (step+1) + ' / ' + steps.length + '</div>' +
+      '<div style="font-size:13px;font-weight:500;color:#1a1a1a;">' + steps[step] + '</div>';
+    overlay.appendChild(info);
+
+    overlay.appendChild(makeDots(pinInput.length));
+
+    var errDiv = document.createElement('div');
+    errDiv.id = 'pchange-err';
+    errDiv.style.cssText = 'font-size:12px;color:#EF4444;min-height:18px;margin-bottom:12px;text-align:center;';
+    overlay.appendChild(errDiv);
+
+    overlay.appendChild(makePinKeypad(function(k) {
+      var err = document.getElementById('pchange-err');
+      if (k === '←') { pinInput = pinInput.slice(0, -1); draw(); return; }
+      if (k === '✓') {
+        if (pinInput.length !== 4) { if (err) err.textContent = '4자리를 입력해 주세요.'; return; }
+        bufs[step] = pinInput;
+        if (hasCurrent && step === 0) {
+          matchPin(pinInput, settings.pins[role]).then(function(ok) {
+            if (!ok) {
+              pinInput = ''; draw();
+              setTimeout(function(){ var e=document.getElementById('pchange-err'); if(e) e.textContent='현재 PIN이 올바르지 않습니다.'; }, 30);
+            } else { step++; pinInput=''; draw(); }
+          });
+          return;
+        }
+        var newIdx  = hasCurrent ? 1 : 0;
+        var confIdx = hasCurrent ? 2 : 1;
+        if (step === newIdx) { step++; pinInput=''; draw(); return; }
+        if (bufs[newIdx] !== bufs[confIdx]) {
+          step = newIdx; pinInput=''; draw();
+          setTimeout(function(){ var e=document.getElementById('pchange-err'); if(e) e.textContent='PIN이 일치하지 않습니다.'; }, 30);
+          return;
+        }
+        sha256pin(bufs[newIdx]).then(function(hash) {
+          if (!settings.pins) settings.pins = {};
+          settings.pins[role] = hash;
+          ls_set('pab-settings-v1', settings);
+          gasWrite('saveSettings', settings);
+          overlay.remove();
+          showToast('✅ PIN 설정 완료!');
+        });
+        return;
+      }
+      if (pinInput.length < 4) { pinInput += k; draw(); }
+    }));
+  }
+
+  draw();
+  document.body.appendChild(overlay);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  insertLockButton();
+  showPinScreen();
+});
+
+// =============================================================
+// 📌 포스트잇 (initBoard)
+// =============================================================
+function initBoard() {
+  var MKEY = 'pab-msgs-v1';
+  var NKEY = 'pab-notices-v1';
+  var SKEY = 'pab-settings-v1';
+  var CKEY = 'pab-common-v1';
+  var PIN_SALT_LOCAL = 'pab_pin_salt_2025';
+
+  var ROLES = {
+    morning:   { l:'오전 매니저님', bg:'#EFF6FF', tx:'#1D4ED8', init:'오전' },
+    afternoon: { l:'오후 매니저님', bg:'#F0FDF4', tx:'#15803D', init:'오후' },
+    evening:   { l:'저녁 매니저님', bg:'#FFFBEB', tx:'#B45309', init:'저녁' }
+  };
+  var TYPES = {
+    handover: { l:'전달사항', bg:'#F0FDF4', tx:'#15803D' },
+    caution:  { l:'주의사항', bg:'#FEF2F2', tx:'#B91C1C' }
+  };
+  var ALL = ['morning','afternoon','evening'];
+
+  var curRole = null, pinOK = false, view = 'home', pinInput = '';
+  var msgs = [], notices = [], settings = { pins:{} }, commonMsgs = [];
+
+  function loadLocal() {
+    msgs       = ls_get(MKEY, []);
+    notices    = ls_get(NKEY, []);
+    settings   = ls_get(SKEY, { pins:{} });
+    commonMsgs = ls_get(CKEY, []);
+    if (!settings.pins) settings.pins = {};
+  }
+  function saveMsgs()   { ls_set(MKEY, msgs);       gasWrite('saveMsgs',     msgs); }
+  function saveNotices(){ ls_set(NKEY, notices);     gasWrite('saveNotices',  notices); }
+  function saveCommon() { ls_set(CKEY, commonMsgs);  gasWrite('saveCommon',   commonMsgs); }
+  function saveSettings(){ ls_set(SKEY, settings);   gasWrite('saveSettings', settings); }
+
+  function syncGAS() {
+    return Promise.all([gasRead('getMsgs'), gasRead('getNotices'), gasRead('getSettings'), gasRead('getCommon')])
+      .then(function(res) {
+        if (res[0]) { msgs       = res[0]; ls_set(MKEY, res[0]); }
+        if (res[1]) { notices    = res[1]; ls_set(NKEY, res[1]); }
+        if (res[2]) { settings   = res[2]; ls_set(SKEY, res[2]); }
+        if (res[3]) { commonMsgs = res[3]; ls_set(CKEY, res[3]); }
+        if (!settings.pins) settings.pins = {};
+      });
+  }
+
+  function unreadFor(role) {
+    return msgs.filter(function(m){ return m.status && m.status[role] === 'unread' && m.from !== role; }).length;
+  }
+  function rcpts(to) { return to === 'all' ? ALL : (ALL.indexOf(to) >= 0 ? [to] : []); }
+  function mySt(m) { return m.status && m.status[curRole] != null ? m.status[curRole] : null; }
+
+  function fmt(iso) {
+    var d = new Date(iso), diff = Date.now() - d;
+    if (diff < 3600000)   return Math.floor(diff/60000) + '분 전';
+    if (diff < 86400000)  return Math.floor(diff/3600000) + '시간 전';
+    if (diff < 172800000) return '어제 ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    return d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function bdg(bg, tx, t) {
+    return '<span style="display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;background:' + bg + ';color:' + tx + ';white-space:nowrap;">' + esc(t) + '</span>';
+  }
+
+  // ── 공통 대시보드 ──
+  function renderCommon() {
+    var active = commonMsgs.filter(function(m){ return !m.commonDone; })
+                           .sort(function(a,b){ return new Date(b.createdAt) - new Date(a.createdAt); });
+    if (!active.length) return '';
+    var h = '<div style="background:#fff;border:1.5px solid #FBBF24;border-radius:14px;padding:14px;margin-bottom:16px;">';
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
+    h += '<div style="font-size:12px;font-weight:600;color:#92400E;">📋 매니저 공통 대시보드</div>';
+    h += '<span style="font-size:10px;color:#92400E;">' + active.length + '건 미처리</span></div>';
+    active.forEach(function(m) {
+      var tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
+      var rf = ROLES[m.from] || { bg:'#f5f6f7', tx:'#333', l:m.from };
+      h += '<div style="background:#FFFBEB;border:0.5px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:8px;">';
+      h += '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:5px;">';
+      h += bdg(rf.bg, rf.tx, rf.l) + bdg(tp.bg, tp.tx, tp.l);
+      h += '<span style="font-size:10px;color:#bbb;margin-left:auto;">' + fmt(m.createdAt) + '</span></div>';
+      h += '<p style="font-size:13px;color:#1a1a1a;line-height:1.6;margin:0 0 8px;white-space:pre-wrap;">' + esc(m.content) + '</p>';
+      h += '<div style="display:flex;justify-content:flex-end;">';
+      h += '<button data-cdone="' + m.id + '" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#FEF3C7;color:#92400E;border:0.5px solid #FBBF24;cursor:pointer;font-weight:500;">처리완료</button>';
+      h += '</div></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  // ── 홈 ──
+  function renderHome() {
+    var activeN = notices.filter(function(n){ return n.active !== false; })
+                         .sort(function(a,b){ return new Date(b.createdAt) - new Date(a.createdAt); });
+    var policy  = activeN.filter(function(n){ return n.type === 'policy'; });
+    var general = activeN.filter(function(n){ return n.type === 'notice'; });
+    var LIMIT   = 50;
+
+    var h = '<div style="padding:.5rem 0 1.5rem;">';
+
+    // 공통 대시보드
+    h += renderCommon();
+
+    // 전체 공고
+    h += '<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:14px;padding:16px;margin-bottom:20px;">';
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
+    h += '<div style="font-size:13px;font-weight:600;color:#1a1a1a;">📢 전체 공고</div>';
+    h += '<span style="font-size:10px;color:#888;">' + activeN.length + '건</span></div>';
+    if (!activeN.length) {
+      h += '<div style="text-align:center;padding:16px 0;color:#bbb;font-size:12px;">등록된 공고가 없습니다.</div>';
+    } else {
+      if (policy.length) {
+        h += '<div style="font-size:10px;font-weight:500;color:#7E22CE;margin-bottom:6px;">정책 공지</div>';
+        policy.forEach(function(n){ h += noticeCard(n, '#ede9fe', LIMIT); });
+      }
+      if (general.length) {
+        h += '<div style="font-size:10px;font-weight:500;color:#1D4ED8;margin:' + (policy.length?'10px':'0') + ' 0 6px;">일반 공지</div>';
+        general.forEach(function(n){ h += noticeCard(n, '#dbeafe', LIMIT); });
+      }
+    }
+    h += '</div>';
+
+    // 역할 선택
+    h += '<div style="text-align:center;margin-bottom:16px;">';
+    h += '<div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">매니저 수신함</div>';
+    h += '<div style="font-size:12px;color:#888;">출근 시 본인 역할을 선택해 주세요</div></div>';
+
+    Object.keys(ROLES).forEach(function(k) {
+      var v = ROLES[k];
+      var n = unreadFor(k);
+      var hasPIN = !!(settings.pins && settings.pins[k]);
+      h += '<button data-role="' + k + '" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:16px 18px;margin-bottom:10px;border-radius:12px;border:0.5px solid #e0e0e0;background:#fff;cursor:pointer;text-align:left;box-sizing:border-box;">';
+      h += '<div style="display:flex;align-items:center;gap:12px;">';
+      h += '<div style="width:40px;height:40px;border-radius:50%;background:' + v.bg + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:' + v.tx + ';">' + v.init + '</div>';
+      h += '<div><div style="font-size:14px;font-weight:500;color:#1a1a1a;">' + v.l + (hasPIN?' 🔒':'') + '</div>';
+      h += '<div style="font-size:11px;color:#888;margin-top:2px;">' + (n > 0 ? '미확인 ' + n + '건' : '새 메시지 없음') + '</div></div></div>';
+      h += n > 0 ? '<div style="background:#EF4444;color:#fff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;">' + n + '</div>' : '<span style="font-size:13px;color:#ccc;">›</span>';
+      h += '</button>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  function noticeCard(n, borderColor, LIMIT) {
+    var short = n.content.length > LIMIT;
+    var preview = short ? n.content.slice(0, LIMIT) + '…' : n.content;
+    var h = '<div style="background:#fff;border:0.5px solid ' + borderColor + ';border-radius:10px;padding:10px 12px;margin-bottom:6px;">';
+    if (n.title) h += '<div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:3px;">' + esc(n.title) + '</div>';
+    h += '<div id="nc-' + n.id + '" style="font-size:12px;color:#333;line-height:1.6;white-space:pre-wrap;">' + esc(preview) + '</div>';
+    if (short) h += '<button data-expand="' + n.id + '" data-full="' + esc(n.content) + '" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;padding:2px 0;margin-top:2px;">더보기 ▼</button>';
+    h += '<div style="font-size:10px;color:#bbb;margin-top:4px;">' + fmt(n.createdAt) + '</div></div>';
+    return h;
+  }
+
+  // ── 헤더 ──
+  function roleHdr() {
+    var v = ROLES[curRole];
+    var h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">';
+    h += '<button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
+    h += '<div style="display:flex;align-items:center;gap:8px;flex:1;">';
+    h += '<div style="width:32px;height:32px;border-radius:50%;background:' + v.bg + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:' + v.tx + ';">' + v.init + '</div>';
+    h += '<div style="font-size:14px;font-weight:500;color:#1a1a1a;">' + v.l + '</div></div>';
+    h += '<button id="btn-pin-change" style="font-size:18px;border:none;background:none;cursor:pointer;padding:4px;color:#bbb;" title="PIN 설정">⚙</button>';
+    h += '<button data-view="compose" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>';
+    h += '</div>';
+    return h;
+  }
+
+  function tabRow(active) {
+    var h = '<div style="display:flex;border-bottom:0.5px solid #ddd;margin-bottom:14px;">';
+    h += '<button data-view="inbox" style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:' + (active==='inbox'?500:400) + ';color:' + (active==='inbox'?'#1a1a1a':'#888') + ';border-bottom:2px solid ' + (active==='inbox'?'#1a1a1a':'transparent') + ';">수신함</button>';
+    h += '<button data-view="sent"  style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:' + (active==='sent'?500:400)  + ';color:' + (active==='sent'?'#1a1a1a':'#888')  + ';border-bottom:2px solid ' + (active==='sent'?'#1a1a1a':'transparent')  + ';">발신함</button>';
+    h += '</div>';
+    return h;
+  }
+
+  function msgCard(m, st) {
+    var isU = (st === 'unread'), isDone = (st === 'done');
+    var rf = ROLES[m.from] || { bg:'#f5f6f7', tx:'#333', l:m.from };
+    var tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
+    var toL = m.to === 'all' ? '매니저 공통' : m.to === 'leader' ? '팀장' : (ROLES[m.to] ? ROLES[m.to].l : m.to);
+    var h = '<div style="background:' + (isU?'#F8FBFF':'#fff') + ';border:' + (isU?'1px solid #BFDBFE':'0.5px solid #e8e8e8') + ';border-radius:12px;padding:12px 14px;margin-bottom:8px;' + (isDone?'opacity:.45;':'') + '">';
+    h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:8px;">';
+    h += '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' + bdg(rf.bg,rf.tx,rf.l) + '<span style="font-size:11px;color:#bbb;">→ ' + esc(toL) + '</span>' + bdg(tp.bg,tp.tx,tp.l);
+    if (isU) h += '<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:20px;background:#3B82F6;color:#fff;">New</span>';
+    h += '</div><span style="font-size:11px;color:#bbb;flex-shrink:0;">' + fmt(m.createdAt) + '</span></div>';
+    h += '<p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ' + (isDone?'0':'8px') + ';font-weight:' + (isU?500:400) + ';white-space:pre-wrap;">' + esc(m.content) + '</p>';
+    if (!isDone) {
+      h += '<div style="display:flex;justify-content:flex-end;"><button data-done="' + m.id + '" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#F0FDF4;color:#15803D;border:0.5px solid #86EFAC;cursor:pointer;font-weight:500;">처리완료</button></div>';
+    } else {
+      h += '<div style="font-size:10px;color:#bbb;text-align:right;margin-top:4px;">✓ 처리완료</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function sec(label, count, color, mt) {
+    return '<div style="font-size:10px;font-weight:500;color:' + color + ';letter-spacing:.06em;margin:' + (mt?'18px':'0') + ' 0 8px;">' + label + ' · ' + count + '건</div>';
+  }
+
+  // ── 수신함 ──
+  function renderInbox() {
+    var ib   = msgs.filter(function(m){ return mySt(m) !== null && m.from !== curRole; });
+    var unrd = ib.filter(function(m){ return mySt(m) === 'unread'; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
+    var rd   = ib.filter(function(m){ return mySt(m) === 'read'; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
+    var dn   = ib.filter(function(m){ return mySt(m) === 'done'; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
+    var h = '<div style="padding:.5rem 0 1.5rem;">' + roleHdr() + tabRow('inbox');
+    if (!ib.length) { h += '<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">새로운 메시지가 없습니다.</div>'; }
+    else {
+      if (unrd.length) { h += sec('미확인', unrd.length, '#3B82F6', false); unrd.forEach(function(m){ h += msgCard(m,'unread'); }); }
+      if (rd.length)   { h += sec('확인함 (미처리)', rd.length, '#B45309', !!unrd.length); rd.forEach(function(m){ h += msgCard(m,'read'); }); }
+      if (dn.length)   { h += sec('처리완료', dn.length, '#bbb', !!(unrd.length||rd.length)); dn.slice(0,20).forEach(function(m){ h += msgCard(m,'done'); }); }
+    }
+    h += '</div>';
+    return h;
+  }
+
+  // ── 발신함 ──
+  function renderSent() {
+    var sent = msgs.filter(function(m){ return m.from === curRole; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
+    var stC = { done:'background:#F0FDF4;color:#15803D', read:'background:#FFFBEB;color:#B45309', unread:'background:#FEF2F2;color:#B91C1C' };
+    var stL = { done:'✓ 처리완료', read:'○ 확인함', unread:'● 미확인' };
+    var h = '<div style="padding:.5rem 0 1.5rem;">' + roleHdr() + tabRow('sent');
+    if (!sent.length) { h += '<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">보낸 메시지가 없습니다.</div>'; }
+    else {
+      sent.forEach(function(m) {
+        var tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
+        var toL = m.to === 'all' ? '매니저 공통' : m.to === 'leader' ? '팀장' : (ROLES[m.to] ? ROLES[m.to].l : m.to);
+        var rList = (m.to === 'leader') ? [] : rcpts(m.to).filter(function(r){ return r !== curRole; });
+        h += '<div style="background:#fff;border:0.5px solid #e8e8e8;border-radius:12px;padding:12px 14px;margin-bottom:8px;">';
+        h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">';
+        h += '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' + bdg(tp.bg,tp.tx,tp.l) + '<span style="font-size:11px;color:#bbb;">→ ' + esc(toL) + '</span></div>';
+        h += '<span style="font-size:11px;color:#bbb;flex-shrink:0;">' + fmt(m.createdAt) + '</span></div>';
+        h += '<p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ' + (rList.length?'8px':'0') + ';white-space:pre-wrap;">' + esc(m.content) + '</p>';
+        if (rList.length) {
+          h += '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
+          rList.forEach(function(r) {
+            var st = m.status && m.status[r] ? m.status[r] : 'unread';
+            h += '<span style="font-size:10px;padding:2px 8px;border-radius:4px;' + (stC[st]||stC.unread) + ';">' + (ROLES[r]?ROLES[r].l:r) + ' ' + (stL[st]||stL.unread) + '</span>';
+          });
+          h += '</div>';
+        } else {
+          h += '<div style="font-size:10px;color:#bbb;">팀장에게 전달됨</div>';
+        }
+        h += '</div>';
+      });
+    }
+    h += '</div>';
+    return h;
+  }
+
+  // ── 작성 ──
+  function renderCompose() {
+    var v = ROLES[curRole];
+    var others = Object.keys(ROLES).filter(function(k){ return k !== curRole; });
+    var h = '<div style="padding:.5rem 0 1.5rem;">';
+    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">';
+    h += '<button data-view="inbox" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
+    h += '<div style="font-size:14px;font-weight:500;color:#1a1a1a;">새 메시지 작성</div></div>';
+    h += '<div style="margin-bottom:12px;"><div style="font-size:10px;color:#888;margin-bottom:4px;">보내는 사람</div>';
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:#f5f6f7;border:0.5px solid #e0e0e0;">';
+    h += '<div style="width:26px;height:26px;border-radius:50%;background:' + v.bg + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:' + v.tx + ';">' + v.init + '</div>';
+    h += '<span style="font-size:13px;">' + v.l + '</span></div></div>';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
+    h += '<div><div style="font-size:10px;color:#888;margin-bottom:4px;">유형</div><select id="comp-type" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">';
+    h += '<option value="handover">전달사항</option><option value="caution">주의사항</option></select></div>';
+    h += '<div><div style="font-size:10px;color:#888;margin-bottom:4px;">받는 사람</div><select id="comp-to" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">';
+    others.forEach(function(k){ h += '<option value="' + k + '">' + ROLES[k].l + '</option>'; });
+    h += '<option value="all">매니저 공통</option><option value="leader">팀장에게</option></select></div></div>';
+    h += '<div style="margin-bottom:16px;"><div style="font-size:10px;color:#888;margin-bottom:4px;">내용</div>';
+    h += '<textarea id="comp-content" placeholder="메시지를 입력하세요..." style="width:100%;padding:10px 12px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;resize:vertical;min-height:120px;font-family:inherit;line-height:1.6;box-sizing:border-box;"></textarea></div>';
+    h += '<button id="btn-send" style="width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">전송하기</button>';
+    h += '</div>';
+    return h;
+  }
+
+  // ── 메인 렌더 ──
+  function render() {
+    var root = document.getElementById('board-root');
+    if (!root) return;
+    if (!curRole)            root.innerHTML = renderHome();
+    else if (view==='sent')    root.innerHTML = renderSent();
+    else if (view==='compose') root.innerHTML = renderCompose();
+    else                       root.innerHTML = renderInbox();
+    bind();
+  }
+
+  // ── 이벤트 바인딩 ──
+  function bind() {
+    var root = document.getElementById('board-root');
+    if (!root) return;
+
+    // 공고 더보기
+    root.querySelectorAll('[data-expand]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var el = document.getElementById('nc-' + btn.dataset.expand);
+        if (!el) return;
+        if (btn.textContent.indexOf('더보기') >= 0) { el.textContent = btn.dataset.full; btn.textContent = '접기 ▲'; }
+        else { el.textContent = btn.dataset.full.slice(0,50) + '…'; btn.textContent = '더보기 ▼'; }
+      });
+    });
+
+    // 역할 선택
+    root.querySelectorAll('[data-role]').forEach(function(btn) {
+      btn.addEventListener('click', function() { curRole = btn.dataset.role; pinOK = true; view = 'inbox'; markRead(); render(); });
+    });
+
+    // 뒤로
+    root.querySelectorAll('[data-back]').forEach(function(btn) {
+      btn.addEventListener('click', function() { curRole = null; view = 'home'; render(); });
+    });
+
+    // 뷰 전환
+    root.querySelectorAll('[data-view]').forEach(function(btn) {
+      btn.addEventListener('click', function() { view = btn.dataset.view; render(); });
+    });
+
+    // 공통 처리완료
+    root.querySelectorAll('[data-cdone]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        commonMsgs = commonMsgs.map(function(m){ return m.id === btn.dataset.cdone ? Object.assign({}, m, {commonDone:true}) : m; });
+        saveCommon(); render();
+      });
+    });
+
+    // PIN 변경 버튼
+    var pinBtn = root.querySelector('#btn-pin-change');
+    if (pinBtn && curRole) pinBtn.addEventListener('click', function(){ showPinChange(curRole); });
+
+    // 전송
+    var sendBtn = root.querySelector('#btn-send');
+    if (sendBtn) {
+      sendBtn.addEventListener('click', function() {
+        var content = (root.querySelector('#comp-content') || {value:''}).value.trim();
+        if (!content || !curRole) return;
+        var to   = (root.querySelector('#comp-to')   || {value:'all'}).value;
+        var type = (root.querySelector('#comp-type') || {value:'handover'}).value;
+        var newMsg = { id: Date.now()+'', type:type, from:curRole, to:to, content:content, createdAt: new Date().toISOString() };
+        if (to === 'all') {
+          newMsg.commonDone = false;
+          commonMsgs = [newMsg].concat(commonMsgs);
+          saveCommon();
+          var status = {};
+          ALL.forEach(function(r){ status[r] = (r !== curRole) ? 'unread' : null; });
+          var forInbox = Object.assign({}, newMsg, {status: status});
+          msgs = [forInbox].concat(msgs);
+          saveMsgs();
+        } else {
+          var rList = rcpts(to);
+          var status2 = {};
+          ALL.forEach(function(r){ status2[r] = rList.indexOf(r) >= 0 ? 'unread' : null; });
+          newMsg.status = status2;
+          msgs = [newMsg].concat(msgs);
+          saveMsgs();
+        }
+        view = 'inbox'; render();
+      });
+    }
+
+    // 처리완료
+    root.querySelectorAll('[data-done]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        msgs = msgs.map(function(m) {
+          if (m.id !== btn.dataset.done) return m;
+          var s = Object.assign({}, m.status); s[curRole] = 'done';
+          return Object.assign({}, m, {status: s});
+        });
+        saveMsgs(); render();
+      });
+    });
+  }
+
+  function markRead() {
+    msgs = msgs.map(function(m) {
+      if (m.status && m.status[curRole] === 'unread' && m.from !== curRole) {
+        var s = Object.assign({}, m.status); s[curRole] = 'read';
+        return Object.assign({}, m, {status: s});
+      }
+      return m;
+    });
+    saveMsgs();
+  }
+
+  // ── 초기화 ──
+  function init() {
+    if (window._boardRoleOverride && !curRole) {
+      curRole = window._boardRoleOverride; pinOK = true; view = 'inbox';
+    }
+    loadLocal(); render();
+    syncGAS().then(function(){ render(); });
+  }
+
+  window._boardRefresh = function() {
+    if (window._boardRoleOverride && !curRole) {
+      curRole = window._boardRoleOverride; pinOK = true; view = 'inbox';
+    }
+    loadLocal(); render();
+    syncGAS().then(function(){ render(); });
+  };
+
+  init();
+}
+
 
 // ── 탭 전환 ──
 const tabBtns = document.querySelectorAll('.tab-btn');
@@ -1966,613 +2628,6 @@ function render(){
 
 render();
 })();}
-
-
-// ── 📌 포스트잇 ──
-function initBoard() {
-  const MKEY = 'pab-msgs-v1';
-  const NKEY = 'pab-notices-v1';
-  const SKEY = 'pab-settings-v1';
-  const CKEY = 'pab-common-v1'; // 매니저 공통 대시보드
-
-  const ROLES = {
-    morning:   { l:'오전 매니저님', bg:'#EFF6FF', tx:'#1D4ED8', init:'오전' },
-    afternoon: { l:'오후 매니저님', bg:'#F0FDF4', tx:'#15803D', init:'오후' },
-    evening:   { l:'저녁 매니저님', bg:'#FFFBEB', tx:'#B45309', init:'저녁' },
-  };
-  const TYPES = {
-    handover: { l:'전달사항', bg:'#F0FDF4', tx:'#15803D' },
-    caution:  { l:'주의사항', bg:'#FEF2F2', tx:'#B91C1C' },
-  };
-  const ALL = ['morning','afternoon','evening'];
-  const PIN_SALT = 'pab_pin_salt_2025';
-
-  // 상태
-  var curRole = null, pinOK = false, view = 'home', pinInput = '';
-  var pinSetupStep = 0, pinSetupBuf = ['','',''];
-  var msgs = [], notices = [], settings = { pins: {} };
-  var commonMsgs = [];
-  var synced = false;
-
-  // ── 데이터 ──
-  function localMsgs()     { return ls_get(MKEY, []); }
-  function localNotices()  { return ls_get(NKEY, []); }
-  function localSettings() { return ls_get(SKEY, { pins: {} }); }
-
-  function saveMsgs(data)     { ls_set(MKEY, data); gasWrite('saveMsgs', data); }
-  function saveCommon(data)   { ls_set(CKEY, data); gasWrite('saveCommon', data); }
-  function saveNotices(data)  { ls_set(NKEY, data); gasWrite('saveNotices', data); }
-  function saveSettings(data) { ls_set(SKEY, data); gasWrite('saveSettings', data); }
-
-  async function syncFromGAS() {
-    const [m, n, s, c] = await Promise.all([
-      gasRead('getMsgs'),
-      gasRead('getNotices'),
-      gasRead('getSettings'),
-      gasRead('getCommon'),
-    ]);
-    if (m) { msgs = m;        ls_set(MKEY, m); }
-    else     msgs = localMsgs();
-
-    if (n) { notices = n;     ls_set(NKEY, n); }
-    else     notices = localNotices();
-
-    if (s) { settings = s;    ls_set(SKEY, s); }
-    else     settings = localSettings();
-
-    if (c) { commonMsgs = c;  ls_set(CKEY, c); }
-    else     commonMsgs = ls_get(CKEY, []);
-
-    if (!settings.pins) settings.pins = {};
-    synced = !!(m || n || s);
-  }
-
-  // ── PIN ──
-  async function hashPin(pin) {
-    const buf = await crypto.subtle.digest('SHA-256',
-      new TextEncoder().encode(pin + PIN_SALT));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-  }
-  async function checkPin(pin, role) {
-    const stored = settings.pins && settings.pins[role];
-    if (!stored) return true; // 미설정 → 통과
-    return await hashPin(pin) === stored;
-  }
-
-  // ── 포맷 ──
-  function fmt(iso) {
-    const d = new Date(iso), diff = Date.now() - d;
-    if (diff < 3600000)   return Math.floor(diff / 60000) + '분 전';
-    if (diff < 86400000)  return Math.floor(diff / 3600000) + '시간 전';
-    if (diff < 172800000) return '어제 ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    return d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-  }
-  function esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-  function bdg(bg, tx, t) {
-    return `<span style="display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;background:${bg};color:${tx};white-space:nowrap;">${esc(t)}</span>`;
-  }
-
-  // ── 수신 카운트 ──
-  function unreadFor(role) {
-    return msgs.filter(m => m.status && m.status[role] === 'unread' && m.from !== role).length;
-  }
-
-  // ════════════════════════
-  //  화면 렌더러
-  // ════════════════════════
-
-
-  // ── 공통 대시보드 ──
-  function renderCommonBoard() {
-    var active = commonMsgs.filter(function(m){ return !m.commonDone; })
-                            .sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
-    if (!active.length) return '';
-    var h = '<div style="background:#fff;border:1.5px solid #FBBF24;border-radius:14px;padding:14px 14px 10px;margin-bottom:16px;">';
-    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
-    h += '<div style="font-size:12px;font-weight:600;color:#92400E;">&#128203; 매니저 공통 대시보드</div>';
-    h += '<span style="font-size:10px;color:#92400E;">' + active.length + '건 미처리</span>';
-    h += '</div>';
-    active.forEach(function(m) {
-      var tp = TYPES[m.type]||{bg:'#f5f6f7',tx:'#333',l:m.type};
-      var rf = ROLES[m.from]||{bg:'#f5f6f7',tx:'#333',l:m.from};
-      h += '<div style="background:#FFFBEB;border:0.5px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:8px;">';
-      h += '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:5px;">';
-      h += bdg(rf.bg, rf.tx, rf.l) + bdg(tp.bg, tp.tx, tp.l);
-      h += '<span style="font-size:10px;color:#bbb;margin-left:auto;">' + fmt(m.createdAt) + '</span>';
-      h += '</div>';
-      h += '<p style="font-size:13px;color:#1a1a1a;line-height:1.6;margin:0 0 8px;white-space:pre-wrap;">' + esc(m.content) + '</p>';
-      h += '<div style="display:flex;justify-content:flex-end;">';
-      h += '<button data-cdone="' + m.id + '" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#FEF3C7;color:#92400E;border:0.5px solid #FBBF24;cursor:pointer;font-weight:500;">처리완료</button>';
-      h += '</div></div>';
-    });
-    h += '</div>';
-    return h;
-  }
-
-  function renderHome() {
-    const activeN = notices.filter(n => n.active !== false)
-                           .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const policy  = activeN.filter(n => n.type === 'policy');
-    const general = activeN.filter(n => n.type === 'notice');
-
-    let h = `<div style="padding:.5rem 0 1.5rem;">`;
-
-    // 전체 공고
-    h += `<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:14px;padding:16px;margin-bottom:20px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div style="font-size:13px;font-weight:600;color:#1a1a1a;">📢 전체 공고</div>
-        <span style="font-size:10px;color:#888;">${activeN.length}건 · ${synced ? '☁ 동기화됨' : '로컬'}</span>
-      </div>`;
-    if (!activeN.length) {
-      h += `<div style="text-align:center;padding:16px 0;color:#bbb;font-size:12px;">등록된 공고가 없습니다.</div>`;
-    } else {
-      if (policy.length) {
-        h += `<div style="font-size:10px;font-weight:500;color:#7E22CE;margin-bottom:6px;">정책 공지</div>`;
-        policy.forEach(n => h += noticeCard(n, '#ede9fe'));
-      }
-      if (general.length) {
-        h += `<div style="font-size:10px;font-weight:500;color:#1D4ED8;margin:${policy.length?'10px':'0'} 0 6px;">일반 공지</div>`;
-        general.forEach(n => h += noticeCard(n, '#dbeafe'));
-      }
-    }
-    h += `</div>`;
-
-    // 역할 선택
-    h += renderCommonBoard();
-    h += `<div style="text-align:center;margin-bottom:16px;">
-      <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">매니저 수신함</div>
-      <div style="font-size:12px;color:#888;">출근 시 본인 역할을 선택해 주세요</div>
-    </div>`;
-
-    Object.keys(ROLES).forEach(k => {
-      const v = ROLES[k];
-      const n = unreadFor(k);
-      const hasPIN = !!(settings.pins && settings.pins[k]);
-      h += `<button data-role="${k}" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:16px 18px;margin-bottom:10px;border-radius:12px;border:0.5px solid #e0e0e0;background:#fff;cursor:pointer;text-align:left;box-sizing:border-box;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:40px;height:40px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:${v.tx};">${v.init}</div>
-          <div>
-            <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l} ${hasPIN ? '🔒' : ''}</div>
-            <div style="font-size:11px;color:#888;margin-top:2px;">${n > 0 ? `미확인 ${n}건` : '새 메시지 없음'}</div>
-          </div>
-        </div>
-        ${n > 0 ? `<div style="background:#EF4444;color:#fff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;">${n}</div>` : `<span style="font-size:13px;color:#ccc;">›</span>`}
-      </button>`;
-    });
-    h += `</div>`;
-    return h;
-  }
-
-  function noticeCard(n, borderColor) {
-    const LIMIT = 50;
-    const short = n.content.length > LIMIT;
-    const preview = short ? n.content.slice(0, LIMIT) + '…' : n.content;
-    return `<div style="background:#fff;border:0.5px solid ${borderColor};border-radius:10px;padding:10px 12px;margin-bottom:6px;">
-      ${n.title ? `<div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:3px;">${esc(n.title)}</div>` : ''}
-      <div id="nc-${n.id}" style="font-size:12px;color:#333;line-height:1.6;white-space:pre-wrap;">${esc(preview)}</div>
-      ${short ? `<button data-expand="${n.id}" data-full="${esc(n.content)}" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;padding:2px 0;margin-top:2px;">더보기 ▼</button>` : ''}
-      <div style="font-size:10px;color:#bbb;margin-top:4px;">${fmt(n.createdAt)}</div>
-    </div>`;
-  }
-
-  function renderPin() {
-    const v = ROLES[curRole];
-    const dots = Array.from({length:4}, (_, i) =>
-      `<div style="width:16px;height:16px;border-radius:50%;border:2px solid #ccc;background:${i < pinInput.length ? '#1a1a1a' : 'transparent'};"></div>`
-    ).join('');
-    const keys = ['1','2','3','4','5','6','7','8','9','←','0','✓'];
-    return `<div style="padding:.5rem 0 1.5rem;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
-        <button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
-      </div>
-      <div style="text-align:center;margin-bottom:28px;">
-        <div style="width:52px;height:52px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:${v.tx};margin:0 auto 10px;">${v.init}</div>
-        <div style="font-size:15px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">${v.l}</div>
-        <div style="font-size:12px;color:#888;margin-bottom:24px;">4자리 PIN 입력</div>
-        <div style="display:flex;justify-content:center;gap:18px;">${dots}</div>
-      </div>
-      <div id="pin-err" style="text-align:center;font-size:12px;color:#EF4444;min-height:18px;margin-bottom:10px;"></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:260px;margin:0 auto;">
-        ${keys.map(k => {
-          const isEnter = k === '✓', isDel = k === '←';
-          return `<button data-key="${esc(k)}" style="height:62px;border-radius:12px;border:0.5px solid #e0e0e0;background:${isEnter?'#1a1a1a':'#fff'};color:${isEnter?'#fff':'#1a1a1a'};font-size:${isDel||isEnter?'18px':'20px'};font-weight:${isDel||isEnter?'400':'500'};cursor:pointer;touch-action:manipulation;">${k}</button>`;
-        }).join('')}
-      </div>
-      <div style="text-align:center;margin-top:20px;">
-        <button data-view="pin-setup" style="font-size:12px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;">
-          PIN ${(settings.pins && settings.pins[curRole]) ? '변경하기 ▸' : '설정하기 ▸'}
-        </button>
-      </div>
-    </div>\`;
-  }
-
-  function renderPinSetup() {
-    const hasCurrent = !!(settings.pins && settings.pins[curRole]);
-    const v = ROLES[curRole];
-    const steps = hasCurrent ? ['현재 PIN', '새 PIN', '새 PIN 확인'] : ['새 PIN', 'PIN 확인'];
-    const stepIdx  = hasCurrent ? pinSetupStep : pinSetupStep;
-    const stepLabel = hasCurrent ? steps[pinSetupStep] : steps[pinSetupStep];
-    const totalSteps = hasCurrent ? 3 : 2;
-    const dots = Array.from({length:4}, (_,i) =>
-      \`<div style="width:16px;height:16px;border-radius:50%;border:2px solid #ccc;background:\${i<pinInput.length?'#1a1a1a':'transparent'};"></div>\`
-    ).join('');
-    const keys = ['1','2','3','4','5','6','7','8','9','←','0','✓'];
-    return \`<div style="padding:.5rem 0 1.5rem;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
-        <button data-view="pin" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
-        <div style="font-size:14px;font-weight:500;color:#1a1a1a;">PIN \${hasCurrent?'변경':'설정'}</div>
-      </div>
-      <div style="text-align:center;margin-bottom:24px;">
-        <div style="width:52px;height:52px;border-radius:50%;background:\${v.bg};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:\${v.tx};margin:0 auto 10px;">\${v.init}</div>
-        <div style="font-size:15px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">\${v.l}</div>
-        <div style="font-size:12px;color:#888;margin-bottom:4px;">단계 \${pinSetupStep+1} / \${totalSteps}</div>
-        <div style="font-size:13px;font-weight:500;color:#1a1a1a;margin-bottom:20px;">\${stepLabel}</div>
-        <div style="display:flex;justify-content:center;gap:18px;">\${dots}</div>
-      </div>
-      <div id="psetup-err" style="text-align:center;font-size:12px;color:#EF4444;min-height:18px;margin-bottom:10px;"></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:260px;margin:0 auto;">
-        \${keys.map(k => {
-          const isEnter = k==='✓', isDel = k==='←';
-          return \`<button data-setup-key="\${k}" style="height:62px;border-radius:12px;border:0.5px solid #e0e0e0;background:\${isEnter?'#1a1a1a':'#fff'};color:\${isEnter?'#fff':'#1a1a1a'};font-size:\${isDel||isEnter?'18px':'20px'};font-weight:\${isDel||isEnter?'400':'500'};cursor:pointer;touch-action:manipulation;">\${k}</button>\`;
-        }).join('')}
-      </div>
-    </div>\`;
-  }
-
-  function renderInbox() {
-    const ib = msgs.filter(m => mySt(m) !== null && m.from !== curRole);
-    const unrd = ib.filter(m => mySt(m) === 'unread').sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
-    const rd   = ib.filter(m => mySt(m) === 'read').sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
-    const dn   = ib.filter(m => mySt(m) === 'done').sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
-    const v = ROLES[curRole];
-
-    let h = `<div style="padding:.5rem 0 1.5rem;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-        <button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
-        <div style="display:flex;align-items:center;gap:8px;flex:1;">
-          <div style="width:32px;height:32px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:${v.tx};">${v.init}</div>
-          <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l}</div>
-        </div>
-        <button data-view="compose" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>
-      </div>
-      <div style="display:flex;border-bottom:0.5px solid #ddd;margin-bottom:14px;">
-        <button data-view="inbox" style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:500;color:#1a1a1a;border-bottom:2px solid #1a1a1a;">수신함</button>
-        <button data-view="sent"  style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:400;color:#888;border-bottom:2px solid transparent;">발신함</button>
-      </div>`;
-
-    if (!ib.length) {
-      h += `<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">새로운 메시지가 없습니다.</div>`;
-    } else {
-      if (unrd.length) { h += sec('미확인', unrd.length, '#3B82F6'); unrd.forEach(m => h += msgCard(m, 'unread')); }
-      if (rd.length)   { h += sec('확인함 (미처리)', rd.length, '#B45309', !!(unrd.length)); rd.forEach(m => h += msgCard(m, 'read')); }
-      if (dn.length)   { h += sec('처리완료', dn.length, '#bbb', !!(unrd.length||rd.length)); dn.slice(0,20).forEach(m => h += msgCard(m, 'done')); }
-    }
-    h += `</div>`;
-    return h;
-  }
-
-  function renderSent() {
-    const sent = msgs.filter(m => m.from === curRole).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
-    const stC = { done:'background:#F0FDF4;color:#15803D', read:'background:#FFFBEB;color:#B45309', unread:'background:#FEF2F2;color:#B91C1C' };
-    const stL = { done:'✓ 처리완료', read:'○ 확인함', unread:'● 미확인' };
-    const v = ROLES[curRole];
-
-    let h = `<div style="padding:.5rem 0 1.5rem;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-        <button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
-        <div style="display:flex;align-items:center;gap:8px;flex:1;">
-          <div style="width:32px;height:32px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:${v.tx};">${v.init}</div>
-          <div style="font-size:14px;font-weight:500;color:#1a1a1a;">${v.l}</div>
-        </div>
-        <button data-view="compose" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>
-      </div>
-      <div style="display:flex;border-bottom:0.5px solid #ddd;margin-bottom:14px;">
-        <button data-view="inbox" style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:400;color:#888;border-bottom:2px solid transparent;">수신함</button>
-        <button data-view="sent"  style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:500;color:#1a1a1a;border-bottom:2px solid #1a1a1a;">발신함</button>
-      </div>`;
-
-    if (!sent.length) {
-      h += `<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">보낸 메시지가 없습니다.</div>`;
-    } else {
-      sent.forEach(m => {
-        const tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
-        const toL = m.to === 'all' ? '매니저 공통' : m.to === 'leader' ? '팀장' : (ROLES[m.to] ? ROLES[m.to].l : m.to);
-        const rList = m.to === 'leader' ? [] : rcpts(m.to).filter(r => r !== curRole);
-        h += `<div style="background:#fff;border:0.5px solid #e8e8e8;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
-            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">${bdg(tp.bg,tp.tx,tp.l)}<span style="font-size:11px;color:#bbb;">→ ${esc(toL)}</span></div>
-            <span style="font-size:11px;color:#bbb;flex-shrink:0;">${fmt(m.createdAt)}</span>
-          </div>
-          <p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ${rList.length?'8px':'0'};white-space:pre-wrap;">${esc(m.content)}</p>
-          ${rList.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;">${rList.map(r => { const st = m.status&&m.status[r]?m.status[r]:'unread'; return `<span style="font-size:10px;padding:2px 8px;border-radius:4px;${stC[st]||stC.unread};">${ROLES[r]?ROLES[r].l:r} ${stL[st]||stL.unread}</span>`; }).join('')}</div>` : `<div style="font-size:10px;color:#bbb;">팀장에게 전달됨</div>`}
-        </div>`;
-      });
-    }
-    h += `</div>`;
-    return h;
-  }
-
-  function renderCompose() {
-    const v = ROLES[curRole];
-    const others = Object.keys(ROLES).filter(k => k !== curRole);
-    return `<div style="padding:.5rem 0 1.5rem;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
-        <button data-view="inbox" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>
-        <div style="font-size:14px;font-weight:500;color:#1a1a1a;">새 메시지 작성</div>
-      </div>
-      <div style="margin-bottom:12px;">
-        <div style="font-size:10px;color:#888;margin-bottom:4px;">보내는 사람</div>
-        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:#f5f6f7;border:0.5px solid #e0e0e0;">
-          <div style="width:26px;height:26px;border-radius:50%;background:${v.bg};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:${v.tx};">${v.init}</div>
-          <span style="font-size:13px;">${v.l}</span>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-        <div>
-          <div style="font-size:10px;color:#888;margin-bottom:4px;">유형</div>
-          <select id="comp-type" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">
-            <option value="handover">전달사항</option><option value="caution">주의사항</option>
-          </select>
-        </div>
-        <div>
-          <div style="font-size:10px;color:#888;margin-bottom:4px;">받는 사람</div>
-          <select id="comp-to" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">
-            ${others.map(k => `<option value="${k}">${ROLES[k].l}</option>`).join('')}
-            <option value="all">매니저 공통</option>
-            <option value="leader">팀장에게</option>
-          </select>
-        </div>
-      </div>
-      <div style="margin-bottom:16px;">
-        <div style="font-size:10px;color:#888;margin-bottom:4px;">내용</div>
-        <textarea id="comp-content" placeholder="메시지를 입력하세요..." style="width:100%;padding:10px 12px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;resize:vertical;min-height:120px;font-family:inherit;line-height:1.6;box-sizing:border-box;"></textarea>
-      </div>
-      <button id="btn-send" style="width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">전송하기</button>
-    </div>`;
-  }
-
-  // ── 헬퍼 ──
-  function mySt(m) { return m.status && m.status[curRole] != null ? m.status[curRole] : null; }
-  function rcpts(to) { return to === 'all' ? ALL : (ALL.includes(to) ? [to] : []); }
-  function sec(label, count, color, mt) {
-    return `<div style="font-size:10px;font-weight:500;color:${color};letter-spacing:.06em;margin:${mt?'18px':'0'} 0 8px;">${label} · ${count}건</div>`;
-  }
-  function msgCard(m, st) {
-    const isU = st === 'unread', isDone = st === 'done';
-    const rf = ROLES[m.from] || { bg:'#f5f6f7', tx:'#333', l:m.from };
-    const tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
-    const toL = m.to==='all'?'전체': m.to==='leader'?'팀장': ROLES[m.to]?ROLES[m.to].l : m.to;
-    return `<div style="background:${isU?'#F8FBFF':'#fff'};border:${isU?'1px solid #BFDBFE':'0.5px solid #e8e8e8'};border-radius:12px;padding:12px 14px;margin-bottom:8px;${isDone?'opacity:.45;':''}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:8px;">
-        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-          ${bdg(rf.bg,rf.tx,rf.l)}<span style="font-size:11px;color:#bbb;">→ ${esc(toL)}</span>${bdg(tp.bg,tp.tx,tp.l)}
-          ${isU?'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:20px;background:#3B82F6;color:#fff;">New</span>':''}
-        </div>
-        <span style="font-size:11px;color:#bbb;flex-shrink:0;white-space:nowrap;">${fmt(m.createdAt)}</span>
-      </div>
-      <p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ${isDone?'0':'8px'};font-weight:${isU?500:400};white-space:pre-wrap;">${esc(m.content)}</p>
-      ${!isDone ? `<div style="display:flex;justify-content:flex-end;"><button data-done="${m.id}" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#F0FDF4;color:#15803D;border:0.5px solid #86EFAC;cursor:pointer;font-weight:500;">처리완료</button></div>` : `<div style="font-size:10px;color:#bbb;text-align:right;margin-top:4px;">✓ 처리완료</div>`}
-    </div>`;
-  }
-
-  // ── 메인 렌더 ──
-  function render() {
-    const root = document.getElementById('board-root');
-    if (!root) return;
-    if (!curRole)         root.innerHTML = renderHome();
-    else if (view==='pin-setup') root.innerHTML = renderPinSetup();
-    else if (!pinOK)         root.innerHTML = renderPin();
-    else if (view==='sent')    root.innerHTML = renderSent();
-    else if (view==='compose') root.innerHTML = renderCompose();
-    else                       root.innerHTML = renderInbox();
-    bindEvents();
-  }
-
-  function bindEvents() {
-    const root = document.getElementById('board-root');
-    if (!root) return;
-
-    // 공고 더보기
-    root.querySelectorAll('[data-expand]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const el = document.getElementById('nc-' + btn.dataset.expand);
-        if (!el) return;
-        if (btn.textContent.includes('더보기')) {
-          el.textContent = btn.dataset.full;
-          btn.textContent = '접기 ▲';
-        } else {
-          el.textContent = btn.dataset.full.slice(0, 100) + '…';
-          btn.textContent = '더보기 ▼';
-        }
-      });
-    });
-
-    // 역할 선택
-    root.querySelectorAll('[data-role]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        curRole = btn.dataset.role; pinOK = false; pinInput = ''; render();
-      });
-    });
-
-    // 뒤로
-    root.querySelectorAll('[data-back]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (!pinOK) { curRole = null; pinInput = ''; }
-        else { curRole = null; pinOK = false; }
-        view = 'home'; render();
-      });
-    });
-
-    // 뷰 전환 (pin-setup 핸들러에서 통합 처리됨)
-
-    // PIN 키패드
-    root.querySelectorAll('[data-key]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const k = btn.dataset.key;
-        const errEl = root.querySelector('#pin-err');
-        if (k === '←') { pinInput = pinInput.slice(0, -1); render(); }
-        else if (k === '✓') {
-          if (pinInput.length !== 4) { if (errEl) errEl.textContent = '4자리를 입력해 주세요.'; return; }
-          const ok = await checkPin(pinInput, curRole);
-          if (ok) {
-            pinOK = true; view = 'inbox';
-            // 미확인 → 확인함
-            msgs = msgs.map(m => {
-              if (m.status && m.status[curRole] === 'unread' && m.from !== curRole) {
-                const s = { ...m.status }; s[curRole] = 'read';
-                return { ...m, status: s };
-              }
-              return m;
-            });
-            saveMsgs(msgs); render();
-          } else {
-            pinInput = ''; render();
-            setTimeout(() => { const e = root.querySelector('#pin-err'); if (e) e.textContent = 'PIN이 올바르지 않습니다.'; }, 30);
-          }
-        } else if (pinInput.length < 4) { pinInput += k; render(); }
-      });
-    });
-
-    // 전송
-    root.querySelector('#btn-send')?.addEventListener('click', () => {
-      const content = (root.querySelector('#comp-content') || {value:''}).value.trim();
-      if (!content || !curRole) return;
-      const to   = (root.querySelector('#comp-to')   || {value:'all'}).value;
-      const type = (root.querySelector('#comp-type') || {value:'handover'}).value;
-      const newMsg = { id: Date.now()+'', type, from: curRole, to, content, createdAt: new Date().toISOString() };
-      if (to === 'all') {
-        // 매니저 공통 → 공통 대시보드 + 개별 수신함 모두
-        newMsg.commonDone = false;
-        commonMsgs = [newMsg, ...commonMsgs];
-        saveCommon(commonMsgs);
-        // 개별 수신함에도 전달
-        const status = {};
-        ALL.forEach(r => { status[r] = r !== curRole ? 'unread' : null; });
-        const msgForInbox = Object.assign({}, newMsg, { status });
-        msgs = [msgForInbox, ...msgs];
-        saveMsgs(msgs);
-      } else {
-        const rList = rcpts(to);
-        const status = {};
-        ALL.forEach(r => { status[r] = rList.includes(r) ? 'unread' : null; });
-        newMsg.status = status;
-        msgs = [newMsg, ...msgs];
-        saveMsgs(msgs);
-      }
-      view = 'inbox'; render();
-    });
-
-    // PIN 설정 뷰 전환
-    root.querySelectorAll('[data-view]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const v = btn.dataset.view;
-        if (v === 'pin-setup') { pinSetupStep=0; pinSetupBuf=['','','']; pinInput=''; }
-        if (v === 'pin') { pinInput=''; }
-        view = v; render();
-      });
-    });
-
-    // PIN 설정 키패드
-    root.querySelectorAll('[data-setup-key]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const k = btn.dataset.setupKey;
-        const errEl = root.querySelector('#psetup-err');
-        const hasCurrent = !!(settings.pins && settings.pins[curRole]);
-        const totalSteps = hasCurrent ? 3 : 2;
-
-        if (k === '←') { pinInput = pinInput.slice(0,-1); render(); return; }
-
-        if (k === '✓') {
-          if (pinInput.length !== 4) { if(errEl) errEl.textContent='4자리를 입력해 주세요.'; return; }
-
-          // 단계별 처리
-          if (hasCurrent && pinSetupStep === 0) {
-            // 현재 PIN 확인
-            const ok = await checkPin(pinInput, curRole);
-            if (!ok) { pinInput=''; render(); setTimeout(()=>{const e=root.querySelector('#psetup-err');if(e)e.textContent='현재 PIN이 올바르지 않습니다.';},30); return; }
-            pinSetupBuf[0] = pinInput; pinSetupStep=1; pinInput=''; render();
-          } else {
-            const bufIdx = hasCurrent ? pinSetupStep : pinSetupStep;
-            pinSetupBuf[bufIdx] = pinInput;
-
-            if ((hasCurrent && pinSetupStep === 1) || (!hasCurrent && pinSetupStep === 0)) {
-              // 새 PIN 입력 완료 → 확인 단계로
-              pinSetupStep++; pinInput=''; render();
-            } else {
-              // 확인 단계: 이전 입력과 비교
-              const newPin  = pinSetupBuf[hasCurrent ? 1 : 0];
-              const confirm = pinInput;
-              if (newPin !== confirm) {
-                pinInput=''; render();
-                setTimeout(()=>{const e=root.querySelector('#psetup-err');if(e)e.textContent='PIN이 일치하지 않습니다. 다시 입력해 주세요.';},30);
-                pinSetupStep = hasCurrent ? 1 : 0; pinInput=''; render();
-                return;
-              }
-              // 저장
-              const hash = await hashPin(newPin);
-              if (!settings.pins) settings.pins = {};
-              settings.pins[curRole] = hash;
-              saveSettings(settings);
-              pinSetupStep=0; pinSetupBuf=['','','']; pinInput='';
-              view='inbox'; pinOK=true; render();
-              // 토스트
-              const toast=document.createElement('div');
-              toast.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;background:#1a1a1a;color:#fff;';
-              toast.textContent='✅ PIN 설정 완료!';
-              document.body.appendChild(toast);
-              setTimeout(()=>toast.remove(),2500);
-            }
-          }
-          return;
-        }
-
-        if (pinInput.length < 4) { pinInput += k; render(); }
-      });
-    });
-
-    // 공통 대시보드 처리완료
-    root.querySelectorAll('[data-cdone]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.cdone;
-        commonMsgs = commonMsgs.map(m => m.id === id ? { ...m, commonDone: true } : m);
-        saveCommon(commonMsgs);
-        render();
-      });
-    });
-
-    // 처리완료
-    root.querySelectorAll('[data-done]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.done;
-        msgs = msgs.map(m => {
-          if (m.id === id) { const s = { ...m.status }; s[curRole] = 'done'; return { ...m, status: s }; }
-          return m;
-        });
-        saveMsgs(msgs); render();
-      });
-    });
-  }
-
-  // ── 초기화 ──
-  async function init() {
-    const root = document.getElementById('board-root');
-    if (!root) return;
-
-    // localStorage 먼저 표시 (즉시)
-    msgs = localMsgs(); notices = localNotices(); settings = localSettings();
-    if (!settings.pins) settings.pins = {};
-    render();
-
-    // 백그라운드로 GAS 동기화
-    syncFromGAS().then(() => render());
-  }
-
-  window._boardRefresh = () => syncFromGAS().then(() => render());
-  init();
-}
-
 </script>
 </body>
 </html>
