@@ -55,8 +55,93 @@
 // ================================================================
 // ⚙️  GAS 연동 설정 — 아래 URL 과 TOKEN 을 실제 값으로 교체하세요
 // ================================================================
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbzvnaAJ22S1rD2VdNdd2RukiGPbTs7uCWV1LZv9sHPUGW4jedYK5XhE9G9G0n39Nf5R/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbwVEFatyNHTnHnu5wYYDJ_dyljcMNSXllDlL2K2_4PXyNbM2L9oIaBmfZUpqpQgOps/exec';
 const GAS_TOKEN = 'pab2024';
+
+// ── GAS 통신 유틸리티 (GET 방식 통일 · CORS 문제 해결) ──
+// 이 코드 블록을 index.html과 admin.html 양쪽 <script>에 포함
+
+const GAS = {
+
+  // ── GET 요청 (읽기) ──
+  async get(action) {
+    const url = `${GAS_URL}?action=${action}&token=${GAS_TOKEN}&t=${Date.now()}`;
+    try {
+      const r = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        cache: 'no-store',
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'GAS error');
+      return j.data;
+    } catch(e) {
+      console.warn(`[GAS.get] ${action} 실패:`, e.message);
+      return null;
+    }
+  },
+
+  // ── GET 방식 저장 (POST 대신 GET + payload 파라미터) ──
+  async save(action, data) {
+    const payload = encodeURIComponent(JSON.stringify(data));
+    // URL 길이 제한(~8000자) 초과 시 청크 분할 저장
+    if (payload.length > 6000) {
+      return GAS._saveChunked(action, data);
+    }
+    const url = `${GAS_URL}?action=${action}&token=${GAS_TOKEN}&payload=${payload}&t=${Date.now()}`;
+    try {
+      const r = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        cache: 'no-store',
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      return !!j.ok;
+    } catch(e) {
+      // GET 실패 시 POST fallback
+      console.warn(`[GAS.save] GET 실패, POST fallback:`, e.message);
+      return GAS._savePost(action, data);
+    }
+  },
+
+  // ── POST fallback ──
+  async _savePost(action, data) {
+    try {
+      const r = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action, data, token: GAS_TOKEN }),
+        redirect: 'follow',
+      });
+      const j = await r.json();
+      return !!j.ok;
+    } catch(e) {
+      console.warn(`[GAS.save] POST도 실패:`, e.message);
+      return false;
+    }
+  },
+
+  // ── 청크 저장 (데이터가 클 경우) ──
+  async _saveChunked(action, data) {
+    // 전체를 POST로 처리 (청크 분할보다 안정적)
+    return GAS._savePost(action, data);
+  },
+
+  // ── 연결 테스트 ──
+  async ping() {
+    const url = `${GAS_URL}?action=ping&token=${GAS_TOKEN}&t=${Date.now()}`;
+    try {
+      const r = await fetch(url, { method:'GET', redirect:'follow', cache:'no-store' });
+      const j = await r.json();
+      return j.ok ? j.ts : null;
+    } catch(e) {
+      return null;
+    }
+  },
+};
+
 
 // ── 상수 ──
 const HKEY     = 'pab-admin-pbkdf2';
@@ -81,24 +166,9 @@ const ALL = ['morning','afternoon','evening'];
 let isAuth=false, view='auth', msgs=[], notices=[], settings={pins:{}};
 
 // ── GAS ──
-async function gasGet(action){
-  try{
-    const r=await fetch(GAS_URL+'?action='+action+'&token='+GAS_TOKEN+'&t='+Date.now(),{cache:'no-store'});
-    const j=await r.json(); return j.ok?j.data:null;
-  }catch(e){ return null; }
-}
-async function gasPost(action,data){
-  try{
-    await fetch(GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({action,data,token:GAS_TOKEN})});
-    return true;
-  }catch(e){ return false; }
-}
-async function gasPing(){
-  try{
-    const r=await fetch(GAS_URL+'?action=ping&token='+GAS_TOKEN+'&t='+Date.now(),{cache:'no-store'});
-    const j=await r.json(); return j.ok?j.ts:null;
-  }catch(e){ return null; }
-}
+async function gasGet(action){ return GAS.get(action); }
+async function gasPost(action, data){ return GAS.save(action, data); }
+async function gasPing(){ return GAS.ping(); }
 
 function saveLocal(k,d){ try{localStorage.setItem(k,JSON.stringify(d));}catch(e){} }
 function loadLocal(k,def){ try{const s=localStorage.getItem(k);if(s){const p=JSON.parse(s);if(p!=null)return p;}}catch(e){} return def; }
