@@ -39,7 +39,7 @@ button,input,select,textarea{ font-family:inherit; }
 
 <script>
 // ── GAS 통신 v2 (JSONP + GET write) ──
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbxCPJyD03Lfz22jMLIV--zzoJZIOkqhDq5btUUYbXE_TEY1WU44yQR9CkkLJlRWXWf2/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbz35TSOHShPq0EjpUs-0Ku67nur7yqdepKgXVu5HUEzxN5smSapxRZrpiSbTvCSJ89e/exec';
 const GAS_TOKEN = 'pab2024';
 
 function gasRead(action) {
@@ -165,8 +165,8 @@ function toast(msg, ok=true) {
 // ════════════════════════
 
 function renderAuth() {
-  const hasHash = !!localStorage.getItem(HKEY);
-  if (!hasHash) {
+  const noHash = !settings.adminHash;
+  if (noHash) {
     return `<div style="text-align:center;padding:60px 0 32px;">
       <div style="font-size:36px;margin-bottom:14px;">🔐</div>
       <div style="font-size:18px;font-weight:600;margin-bottom:6px;">관리자 비밀번호 설정</div>
@@ -494,7 +494,7 @@ function bindMain() {
     if (n1 !== n2) { err.textContent='새 비밀번호가 일치하지 않습니다.'; return; }
     if (n1.length < 4) { err.textContent='4자 이상이어야 합니다.'; return; }
     err.textContent='확인 중...'; err.style.color='#F59E0B';
-    if (!await verifyPw(old, ls_get(HKEY,''))) { err.textContent='현재 비밀번호가 올바르지 않습니다.'; err.style.color='#EF4444'; return; }
+    if (!await verifyPw(old, settings.adminHash || '')) { err.textContent='현재 비밀번호가 올바르지 않습니다.'; err.style.color='#EF4444'; return; }
     settings.adminHash = await hashPw(n1); ls_set(SKEY, settings); gasWrite('saveSettings', settings);
     err.textContent='✅ 변경 완료!'; err.style.color='#15803D';
     setTimeout(() => { view='main'; render(); }, 700);
