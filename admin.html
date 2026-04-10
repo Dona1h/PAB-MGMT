@@ -38,29 +38,44 @@ button,input,select,textarea{ font-family:inherit; }
 <div class="page" id="app"></div>
 
 <script>
-// ── GAS 통신 ──
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbx4hvojWYGwfqPu8BXhCYJJHN_5wys95OFVqDMdTdtj5jfHrLSqW94w5SfInNrKYcI/exec';
+// ── GAS 통신 v2 (JSONP + GET write) ──
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbxCPJyD03Lfz22jMLIV--zzoJZIOkqhDq5btUUYbXE_TEY1WU44yQR9CkkLJlRWXWf2/exec';
 const GAS_TOKEN = 'pab2024';
 
-async function gasRead(action) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 5000);
-  try {
-    const r = await fetch(`${GAS_URL}?token=${GAS_TOKEN}&action=${action}&_=${Date.now()}`,
-      { signal: ctrl.signal, redirect: 'follow', cache: 'no-store' });
-    clearTimeout(timer);
-    const j = await r.json();
-    return j.ok ? j.data : null;
-  } catch(e) { clearTimeout(timer); return null; }
+function gasRead(action) {
+  return new Promise(function(resolve) {
+    const cbName = '_pab_' + action.replace(/[^a-z]/g,'') + '_' + Date.now();
+    const timer = setTimeout(function() {
+      delete window[cbName];
+      const el = document.getElementById(cbName);
+      if (el) el.remove();
+      resolve(null);
+    }, 8000);
+    window[cbName] = function(data) {
+      clearTimeout(timer);
+      delete window[cbName];
+      const el = document.getElementById(cbName);
+      if (el) el.remove();
+      resolve(data && data.ok ? data.data : null);
+    };
+    const script = document.createElement('script');
+    script.id = cbName;
+    script.src = GAS_URL + '?token=' + GAS_TOKEN + '&action=' + action + '&callback=' + cbName + '&_=' + Date.now();
+    script.onerror = function() { clearTimeout(timer); delete window[cbName]; script.remove(); resolve(null); };
+    document.head.appendChild(script);
+  });
 }
 
 function gasWrite(action, data) {
   try {
-    fetch(GAS_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ token: GAS_TOKEN, action, data })
-    });
+    let d = Array.isArray(data) && action === 'saveMsgs' ? data.slice(0, 30) : data;
+    const payload = encodeURIComponent(JSON.stringify(d));
+    if (payload.length > 7000) return;
+    const url = GAS_URL + '?token=' + GAS_TOKEN + '&action=' + action + '&payload=' + payload + '&_=' + Date.now();
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = script.onerror = function() { script.remove(); };
+    document.head.appendChild(script);
   } catch(e) {}
 }
 
@@ -71,7 +86,7 @@ function ls_set(k, v)   { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 const MKEY = 'pab-msgs-v1';
 const NKEY = 'pab-notices-v1';
 const SKEY = 'pab-settings-v1';
-const HKEY = 'pab-admin-hash-v1';
+// adminHash는 settings 안에서 관리 (GAS 동기화됨)
 const ITER = 100000;
 const PIN_SALT = 'pab_pin_salt_2025';
 
@@ -389,7 +404,7 @@ function bindAuth() {
     if (p1.length < 4) { err.textContent='4자 이상 입력해 주세요.'; return; }
     if (p1 !== p2) { err.textContent='비밀번호가 일치하지 않습니다.'; return; }
     err.textContent='설정 중...'; err.style.color='#F59E0B';
-    ls_set(HKEY, await hashPw(p1));
+    settings.adminHash = await hashPw(p1); ls_set(SKEY, settings); gasWrite('saveSettings', settings);
     isAuth = true; view = 'main';
     render();
     loadAll().then(() => render());
@@ -400,7 +415,7 @@ function bindAuth() {
     const err = app.querySelector('#auth-err');
     if (!pw) { err.textContent='비밀번호를 입력해 주세요.'; return; }
     err.textContent='확인 중...'; err.style.color='#F59E0B';
-    const ok = await verifyPw(pw, ls_get(HKEY, ''));
+    const ok = await verifyPw(pw, settings.adminHash || '');
     if (ok) {
       isAuth = true; view = 'main';
       render();
@@ -409,7 +424,7 @@ function bindAuth() {
   });
   app.querySelector('#pw')?.addEventListener('keydown', e => { if (e.key==='Enter' && loginBtn) loginBtn.click(); });
   app.querySelector('#btn-reset')?.addEventListener('click', () => {
-    if (confirm('비밀번호를 초기화하시겠습니까?')) { localStorage.removeItem(HKEY); render(); }
+    if (confirm('비밀번호를 초기화하시겠습니까?')) { settings.adminHash = ''; ls_set(SKEY, settings); gasWrite('saveSettings', settings); render(); }
   });
 }
 
@@ -480,7 +495,7 @@ function bindMain() {
     if (n1.length < 4) { err.textContent='4자 이상이어야 합니다.'; return; }
     err.textContent='확인 중...'; err.style.color='#F59E0B';
     if (!await verifyPw(old, ls_get(HKEY,''))) { err.textContent='현재 비밀번호가 올바르지 않습니다.'; err.style.color='#EF4444'; return; }
-    ls_set(HKEY, await hashPw(n1));
+    settings.adminHash = await hashPw(n1); ls_set(SKEY, settings); gasWrite('saveSettings', settings);
     err.textContent='✅ 변경 완료!'; err.style.color='#15803D';
     setTimeout(() => { view='main'; render(); }, 700);
   });
