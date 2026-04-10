@@ -280,47 +280,83 @@
 
 <script>
 // ================================================================
-// PAB GAS 통신 레이어 — 단순하고 확실하게
+// PAB GAS 통신 레이어 v2 — JSONP + GET write
+// CORS 문제 구조적 해결
 // ================================================================
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbx4hvojWYGwfqPu8BXhCYJJHN_5wys95OFVqDMdTdtj5jfHrLSqW94w5SfInNrKYcI/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbxCPJyD03Lfz22jMLIV--zzoJZIOkqhDq5btUUYbXE_TEY1WU44yQR9CkkLJlRWXWf2/exec';
 const GAS_TOKEN = 'pab2024';
 
-// 읽기: GET + 5초 타임아웃
-async function gasRead(action) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 5000);
+// ── JSONP 읽기 (CORS 완전 우회) ──
+function gasRead(action) {
+  return new Promise(function(resolve) {
+    const cbName = '_pab_' + action + '_' + Date.now();
+    const timer = setTimeout(function() {
+      delete window[cbName];
+      const el = document.getElementById(cbName);
+      if (el) el.remove();
+      console.warn('[GAS] timeout:', action);
+      resolve(null);
+    }, 8000);
+
+    window[cbName] = function(data) {
+      clearTimeout(timer);
+      delete window[cbName];
+      const el = document.getElementById(cbName);
+      if (el) el.remove();
+      resolve(data && data.ok ? data.data : null);
+    };
+
+    const script = document.createElement('script');
+    script.id  = cbName;
+    script.src = GAS_URL + '?token=' + GAS_TOKEN + '&action=' + action + '&callback=' + cbName + '&_=' + Date.now();
+    script.onerror = function() {
+      clearTimeout(timer);
+      delete window[cbName];
+      script.remove();
+      console.warn('[GAS] script error:', action);
+      resolve(null);
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// ── GET 쓰기 (payload 파라미터, CORS 없음) ──
+function gasWrite(action, data) {
   try {
-    const r = await fetch(
-      `${GAS_URL}?token=${GAS_TOKEN}&action=${action}&_=${Date.now()}`,
-      { signal: ctrl.signal, redirect: 'follow', cache: 'no-store' }
-    );
-    clearTimeout(timer);
-    const j = await r.json();
-    return j.ok ? j.data : null;
+    const payload = encodeURIComponent(JSON.stringify(data));
+    const MAX = 7000;
+    if (payload.length > MAX) {
+      // 데이터가 크면 최근 30건만 잘라서 저장
+      if (Array.isArray(data)) {
+        gasWrite(action, data.slice(0, 30));
+      }
+      return;
+    }
+    const url = GAS_URL + '?token=' + GAS_TOKEN + '&action=' + action + '&payload=' + payload + '&_=' + Date.now();
+    // script 태그로 GET 요청 (CORS 없음, 응답은 무시)
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = script.onerror = function() { script.remove(); };
+    document.head.appendChild(script);
   } catch(e) {
-    clearTimeout(timer);
-    return null;
+    console.warn('[GAS] write error:', e);
   }
 }
 
-// 쓰기: no-cors POST (파이어앤드포겟 — CORS 완전 우회)
-function gasWrite(action, data) {
-  try {
-    fetch(GAS_URL, {
-      method:  'POST',
-      mode:    'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body:    JSON.stringify({ token: GAS_TOKEN, action, data })
-    });
-  } catch(e) { /* silent */ }
-}
-
-// localStorage 헬퍼
+// ── localStorage 헬퍼 ──
 function ls_get(k, def) {
-  try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch(e) { return def; }
+  try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; }
+  catch(e) { return def; }
 }
 function ls_set(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); } catch(e) {}
+}
+
+// ── 핑 테스트 (브라우저 콘솔에서 확인용) ──
+function gasPing() {
+  gasRead('ping').then(function(r) {
+    console.log('[GAS ping]', r ? 'OK ✅ ts=' + r : '실패 ❌ — GAS URL 또는 배포 설정 확인');
+  });
 }
 
 // ── 탭 전환 ──
@@ -1926,6 +1962,7 @@ function render(){
 
 render();
 })();}
+
 
 // ── 📌 포스트잇 ──
 function initBoard() {
