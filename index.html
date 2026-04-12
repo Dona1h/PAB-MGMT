@@ -275,7 +275,7 @@
 // PAB GAS 통신 레이어 v2 — JSONP + GET write
 // CORS 문제 구조적 해결
 // ================================================================
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbxj3fQldpV3lhdWzUhos8PE8FOCQoVyCBdfFnCITM6SLTJNFErBOwFW_D7DDh5-08XT/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbzUPLR494z90no3j8hGiLV7KKWa4y_CU5y8W1yIGdNlQsLI5mz7kZYFSB50W3YytszA/exec';
 const GAS_TOKEN = 'pab2024';
 
 // ── JSONP 읽기 (CORS 완전 우회) ──
@@ -394,6 +394,10 @@ async function resolvePin(pin, settings) {
       return { mode:'manager', role:r };
     }
   }
+  // 직원 PIN
+  if (settings.pins && settings.pins['staff'] && await matchPin(pin, settings.pins['staff'])) {
+    return { mode:'staff', role:'staff' };
+  }
   return null;
 }
 
@@ -401,7 +405,7 @@ async function resolvePin(pin, settings) {
 function updateTabBar() {
   const boardBtn = document.querySelector('.tab-btn[data-tab="board"]');
   if (!boardBtn) return;
-  if (window.appState.mode === 'manager') {
+  if (window.appState.mode === 'manager' || window.appState.mode === 'staff') {
     boardBtn.style.display = '';
   } else {
     boardBtn.style.display = 'none';
