@@ -791,11 +791,11 @@ function showPinRegister(role, onSuccess) {
 }
 
 
-// =============================================================
-// 📌 포스트잇 보드 v4
-// 내책상(역할별 로컬 저장) + 인라인 작성 + 붙이기
-// =============================================================
+// =====================================================
+// 📌 포스트잇 보드 — 완전 새 작성
+// =====================================================
 function initBoard() {
+
   var PKEY = 'pab-posts-v1';
   var NKEY = 'pab-notices-v1';
   var SKEY = 'pab-settings-v1';
@@ -807,53 +807,20 @@ function initBoard() {
     staff:     { l:'직원',         color:'#EFF6FF', border:'#BFDBFE', dot:'#3B82F6' }
   };
   var ROLE_KEYS = ['morning','afternoon','evening','staff'];
+  var CW = 165;
 
   var myRole = null;
   var posts = [], notices = [], settings = { pins:{} };
-  var view = 'board'; // 'board' | 'archive'
+  var view = 'board';
   var sortMode = 'importance';
+  var draftId = null;
+  var attachParentId = null;
   var zCounter = 100;
-  var draftId = null; // 현재 작성 중인 draft id
-  var attachParentId = null; // 현재 붙이기 중인 부모 id
 
-  // ── 내책상 (localStorage, 역할별) ──
-  function getDeskKey(role) { return 'pab-desk-' + (role||'default'); }
-  function loadDesk(role) { return ls_get(getDeskKey(role), {}); }
-  function saveDesk(role, layout) { ls_set(getDeskKey(role), layout); }
-  function getDeskPos(role, id) {
-    var d = loadDesk(role);
-    return d[id] || null;
-  }
-  function setDeskPos(role, id, x, y, z) {
-    var d = loadDesk(role);
-    d[id] = { x:x, y:y, z:z };
-    saveDesk(role, d);
-  }
-  function removeDeskPos(role, id) {
-    var d = loadDesk(role);
-    delete d[id];
-    saveDesk(role, d);
-  }
-  // 내책상에 없는 포스트잇 자동 배치
-  function autoPlaceNew(role, id) {
-    var d = loadDesk(role);
-    var maxY = 10;
-    Object.values(d).forEach(function(p){ if(p.y+200 > maxY) maxY = p.y+200; });
-    var existing = Object.keys(d).length;
-    var col = existing % 2;
-    var x = col === 0 ? 10 : 175;
-    var pos = { x:x, y:maxY, z:zCounter++ };
-    d[id] = pos;
-    saveDesk(role, d);
-    return pos;
-  }
-  // 내 책상 적용 (현재 역할의 desk로 전체 재배치)
-  function applyMyDesk() {
-    // 이미 loadDesk로 각 카드 위치 읽음 — 단순히 render
-    render();
-  }
+  function deskKey(r) { return 'pab-desk-' + (r||'x'); }
+  function loadDesk(r) { return ls_get(deskKey(r), {}); }
+  function saveDesk(r, d) { ls_set(deskKey(r), d); }
 
-  // ── 데이터 ──
   function loadLocal() {
     posts    = ls_get(PKEY, []);
     notices  = ls_get(NKEY, []);
@@ -863,646 +830,453 @@ function initBoard() {
   function savePosts() { ls_set(PKEY, posts); gasWrite('savePosts', posts); }
   function syncGAS() {
     return Promise.all([gasRead('getPosts'), gasRead('getNotices'), gasRead('getSettings')])
-      .then(function(res) {
-        if (res[0]) { posts    = res[0]; ls_set(PKEY, res[0]); }
-        if (res[1]) { notices  = res[1]; ls_set(NKEY, res[1]); }
-        if (res[2]) { settings = res[2]; ls_set(SKEY, res[2]); }
-        if (!settings.pins) settings.pins = {};
+      .then(function(r) {
+        if (r[0]) { posts    = r[0]; ls_set(PKEY, r[0]); }
+        if (r[1]) { notices  = r[1]; ls_set(NKEY, r[1]); }
+        if (r[2]) { settings = r[2]; ls_set(SKEY, r[2]); if (!settings.pins) settings.pins = {}; }
       });
   }
 
-  // ── 정렬 ──
   function activePosts() {
     return posts.filter(function(p){ return !p.done && !p.parentId; });
+  }
+  function childrenOf(pid) {
+    return posts.filter(function(p){ return p.parentId === pid && !p.done; })
+                .sort(function(a,b){ return new Date(a.createdAt)-new Date(b.createdAt); });
   }
   function sortedActive() {
     var a = activePosts();
     if (sortMode === 'importance') {
       return a.sort(function(a,b){
-        if(a.important&&!b.important) return -1;
-        if(!a.important&&b.important) return 1;
+        if (a.important && !b.important) return -1;
+        if (!a.important && b.important) return 1;
         return new Date(b.createdAt)-new Date(a.createdAt);
       });
     }
     return a.sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
   }
-  function childrenOf(parentId) {
-    return posts.filter(function(p){ return p.parentId===parentId && !p.done; })
-                .sort(function(a,b){ return new Date(a.createdAt)-new Date(b.createdAt); });
-  }
-  function sortedDone() {
+  function donePosts() {
     return posts.filter(function(p){ return !!p.done && !p.parentId; })
                 .sort(function(a,b){ return new Date(b.done.at)-new Date(a.done.at); });
   }
 
-  // ── 포맷 ──
   function fmt(iso) {
     var d = new Date(iso);
-    var yy = d.getFullYear();
     var mm = String(d.getMonth()+1).padStart(2,'0');
     var dd = String(d.getDate()).padStart(2,'0');
     var hh = String(d.getHours()).padStart(2,'0');
     var mi = String(d.getMinutes()).padStart(2,'0');
-    return yy+'.'+mm+'.'+dd+' '+hh+':'+mi;
+    return d.getFullYear()+'.'+mm+'.'+dd+' '+hh+':'+mi;
   }
-  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
-  // ── 공지사항 ──
+  function btnRed(id, active) {
+    var s = 'width:20px;height:20px;border-radius:50%;background:#EF4444;border:'+(active?'2px solid #fff;':'none;')+'cursor:pointer;flex-shrink:0;opacity:'+(active?'1':'0.35')+';';
+    return '<button data-toggle-imp="'+id+'" style="'+s+'" title="중요 표시"></button>';
+  }
+  function btnGreen(pid) {
+    return '<button data-attach-start="'+pid+'" style="width:20px;height:20px;border-radius:50%;background:#22C55E;border:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;" title="덧붙이기"><svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="4.5" y1="1" x2="4.5" y2="8"/><line x1="1" y1="4.5" x2="8" y2="4.5"/></svg></button>';
+  }
+  function btnBlue(postId, title) {
+    return '<button data-done-post="'+postId+'" style="width:20px;height:20px;border-radius:50%;background:#3B82F6;border:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;" title="'+(title||'처리완료')+'"><svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polyline points="1.5,4.5 3.5,6.5 7.5,2.5"/></svg></button>';
+  }
+  function doneBadge(label, at) {
+    var h = '<div style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:#EFF6FF;border:0.5px solid #BFDBFE;border-radius:6px;margin-top:6px;">';
+    h += '<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><polyline points="1,4 3,6 7,2"/></svg></div>';
+    h += '<span style="font-size:10px;color:#1D4ED8;font-weight:500;">'+esc(label)+' · '+fmt(at)+' 처리완료</span>';
+    h += '</div>';
+    return h;
+  }
+
   function renderNotices() {
     var active = notices.filter(function(n){ return n.active!==false; })
                         .sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
     if (!active.length) return '';
-    var LIMIT=50, h='';
-    h += '<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:12px;padding:14px;margin-bottom:14px;">';
-    h += '<div style="font-size:12px;font-weight:600;color:#1a1a1a;margin-bottom:10px;">📢 전체 공고 <span style="font-size:10px;font-weight:400;color:#888;">('+active.length+'건)</span></div>';
+    var LIMIT = 50;
+    var h = '<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:12px;padding:14px;margin-bottom:14px;">';
+    h += '<div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:10px;">📢 전체 공고 <span style="font-size:10px;font-weight:400;color:#888;">('+active.length+'건)</span></div>';
     active.forEach(function(n) {
-      var short = n.content.length>LIMIT;
+      var short = n.content.length > LIMIT;
       h += '<div style="margin-bottom:7px;padding:8px 10px;border-radius:8px;border:0.5px solid '+(n.type==='policy'?'#e4d0fe':'#bfdbfe')+';background:#fff;">';
       if (n.title) h += '<div style="font-size:11px;font-weight:600;color:#1a1a1a;margin-bottom:2px;">'+esc(n.title)+'</div>';
       h += '<div id="nc-'+n.id+'" style="font-size:11px;color:#333;line-height:1.55;white-space:pre-wrap;">'+esc(short?n.content.slice(0,LIMIT)+'…':n.content)+'</div>';
       if (short) h += '<button data-expand="'+n.id+'" data-full="'+esc(n.content)+'" style="font-size:10px;color:#888;background:none;border:none;cursor:pointer;padding:2px 0;">더보기 ▼</button>';
-      h += '<div style="font-size:10px;color:#bbb;margin-top:3px;">'+fmt(n.createdAt)+'</div></div>';
+      h += '<div style="font-size:10px;color:#bbb;margin-top:3px;">'+fmt(n.createdAt)+'</div>';
+      h += '</div>';
     });
     h += '</div>';
     return h;
   }
 
-  // ── 역할 선택 바 ──
   function renderRoleBar() {
+    var am = window.appState && window.appState.mode;
+    var ar = window.appState && window.appState.role;
     var h = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">';
-    h += '<span style="font-size:11px;color:#888;margin-right:2px;">나:</span>';
-    var appRole = window.appState&&window.appState.role;
-    var appMode = window.appState&&window.appState.mode;
+    h += '<span style="font-size:11px;color:#888;">나:</span>';
     ROLE_KEYS.forEach(function(k) {
       var v = ROLE_DEF[k];
-      var isMe = (k===myRole);
-      var canSelect = (appMode==='manager'&&k===appRole)||(appMode==='staff'&&k==='staff');
-      h += '<button data-select-role="'+k+'" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:'+(isMe?'600':'400')+';border:'+(isMe?'1.5px solid '+v.border:'0.5px solid #ddd')+';background:'+(isMe?v.color:'#fff')+';color:#1a1a1a;cursor:'+(canSelect?'pointer':'default')+';opacity:'+(canSelect||isMe?'1':'0.4')+';transition:all .15s;">'+v.l.replace('님','')+'</button>';
+      var isMe = (k === myRole);
+      var can = (am==='manager'&&k===ar)||(am==='staff'&&k==='staff');
+      h += '<button data-select-role="'+k+'" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:'+(isMe?'600':'400')+';border:'+(isMe?'1.5px solid '+v.border:'0.5px solid #ddd')+';background:'+(isMe?v.color:'#fff')+';color:#1a1a1a;cursor:'+(can?'pointer':'default')+';opacity:'+(can||isMe?'1':'0.4')+';">'+v.l.replace('님','')+'</button>';
     });
     h += '</div>';
     return h;
   }
 
-  // ── 툴바 ──
   function renderToolbar() {
-    var doneCnt = sortedDone().length;
+    var cnt = donePosts().length;
     var h = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:14px;flex-wrap:wrap;">';
-    if (myRole) {
-      h += '<button data-write style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">붙이기</button>';
-    }
+    if (myRole) h += '<button data-write style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">붙이기</button>';
     h += '<button data-sort="importance" style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:'+(sortMode==='importance'?'#1a1a1a':'#fff')+';color:'+(sortMode==='importance'?'#fff':'#888')+';cursor:pointer;">중요순</button>';
     h += '<button data-sort="time" style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:'+(sortMode==='time'?'#1a1a1a':'#fff')+';color:'+(sortMode==='time'?'#fff':'#888')+';cursor:pointer;">시간순</button>';
     h += '<button data-mydesk style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;cursor:pointer;font-weight:500;">📌 내책상</button>';
-    h += '<button data-view="archive" style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:#fff;color:#888;cursor:pointer;margin-left:auto;">완료함'+(doneCnt?' <span style="background:#888;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;">'+doneCnt+'</span>':'')+'</button>';
+    h += '<button data-view="archive" style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:#fff;color:#888;cursor:pointer;margin-left:auto;">완료함'+(cnt?' <span style="background:#888;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;">'+cnt+'</span>':'')+'</button>';
     h += '</div>';
     return h;
   }
 
-  // ── 자식 카드 렌더 ──
-  function renderChild(p) {
-    var v = ROLE_DEF[p.role]||{l:p.role,color:'#f5f5f5',border:'#ddd',dot:'#aaa'};
-    var h = '<div class="pab-child" style="background:'+v.color+';border:1px solid '+v.border+';border-radius:0 0 10px 10px;border-top:none;margin-top:-1px;padding:8px 10px 8px;box-sizing:border-box;">';
-    h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">';
-    h += '<div style="width:7px;height:7px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
-    h += '<span style="font-size:10px;font-weight:500;color:#555;">'+esc(v.l)+'</span>';
-    h += '<span style="font-size:10px;color:#bbb;margin-left:auto;">'+fmt(p.createdAt)+'</span></div>';
-    h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;white-space:pre-wrap;word-break:break-all;">'+esc(p.content)+'</div>';
-    h += '</div>';
-    return h;
-  }
-
-  // ── 자식 포스트잇 카드 (캔버스 절대좌표, 부모 위에 겹침) ──
-  function renderChildCard(c, pos, parentId) {
-    var v = ROLE_DEF[c.role]||{l:c.role,color:'#f5f5f5',border:'#ddd',dot:'#aaa'};
-    var h = '<div class="pab-card pab-child-card" data-pid="'+c.id+'" data-parent="'+parentId+'" ';
-    h += 'style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:155px;z-index:'+pos.z+';';
-    h += 'cursor:default;user-select:none;box-sizing:border-box;pointer-events:all;">';
-    h += '<div style="background:'+v.color+';border:1px solid '+v.border+';border-radius:10px;';
-    h += 'box-shadow:0 4px 14px rgba(0,0,0,.13);">';
-    // 헤더
-    h += '<div style="display:flex;align-items:center;gap:5px;padding:8px 8px 3px;">';
-    h += '<div style="width:7px;height:7px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
-    h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;">'+esc(v.l)+'</span>';
-    h += '<span style="font-size:10px;color:#bbb;">'+fmt(c.createdAt)+'</span>';
-    h += '</div>';
-    // 내용
-    h += '<div style="padding:3px 10px 10px;font-size:12px;color:#1a1a1a;line-height:1.6;';
-    h += 'white-space:pre-wrap;word-break:break-all;">'+esc(c.content)+'</div>';
-    h += '</div></div>';
-    return h;
-  }
-
-  // ── 붙이기 draft 카드 ──
-  function renderAttachDraft(parentId) {
-    if (!myRole) return '';
-    var v = ROLE_DEF[myRole]||{color:'#f5f5f5',border:'#ddd'};
-    var h = '<div id="attach-draft-'+parentId+'" style="background:'+v.color+';border:1.5px dashed '+v.border+';border-radius:0 0 10px 10px;border-top:none;margin-top:-1px;padding:8px 10px;box-sizing:border-box;">';
-    h += '<textarea id="attach-ta-'+parentId+'" placeholder="추가 내용..." style="width:100%;min-height:70px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:none;color:#1a1a1a;padding:0;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>';
-    h += '<div style="display:flex;gap:6px;margin-top:6px;">';
-    h += '<button data-attach-confirm="'+parentId+'" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 붙이기</button>';
-    h += '<button data-attach-cancel="'+parentId+'" style="padding:5px 10px;border-radius:6px;font-size:11px;background:none;border:0.5px solid #ddd;color:#888;cursor:pointer;">✕</button>';
-    h += '</div></div>';
-    return h;
-  }
-
-  // ── 포스트잇 카드 ──
   function renderCard(p, pos) {
-    var v = ROLE_DEF[p.role]||{l:p.role,color:'#f5f5f5',border:'#ddd',dot:'#aaa'};
-    var borderStyle = p.important
-      ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 4px 18px rgba(239,68,68,.20);'
-      : 'border:1px solid '+v.border+';box-shadow:0 3px 12px rgba(0,0,0,.09);';
-    var children = childrenOf(p.id);
-    var isAttaching = (attachParentId === p.id);
+    var v = ROLE_DEF[p.role] || { l:p.role, color:'#f5f5f5', border:'#ddd', dot:'#aaa' };
+    var cc = childrenOf(p.id);
+    var isAtt = (attachParentId === p.id);
+    var bStyle = p.important
+      ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 4px 16px rgba(239,68,68,.15);'
+      : 'border:1.5px solid '+v.border+';box-shadow:0 3px 12px rgba(0,0,0,.09);';
 
-    var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:160px;z-index:'+pos.z+';cursor:grab;user-select:none;box-sizing:border-box;pointer-events:all;">';
-
-    // 부모 카드 본체
-    h += '<div style="background:'+v.color+';border-radius:12px;'+borderStyle+'box-sizing:border-box;">';
-
-    // 중요 띠
-    if (p.important) {
-      h += '<div style="background:#EF4444;border-radius:8px 8px 0 0;padding:3px 8px;font-size:10px;font-weight:600;color:#fff;">🔴 중요</div>';
-    }
-
-    // 헤더
-    h += '<div style="display:flex;align-items:center;gap:5px;padding:'+(p.important?'5px 8px 3px':'8px 8px 3px')+';cursor:grab;">';
+    var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+CW+'px;z-index:'+pos.z+';box-sizing:border-box;pointer-events:all;">';
+    h += '<div style="background:'+v.color+';border-radius:12px;'+bStyle+'padding:11px 13px;">';
+    if (p.important) h += '<div style="background:#EF4444;margin:-11px -13px 9px;padding:3px 10px;border-radius:10px 10px 0 0;font-size:10px;font-weight:600;color:#fff;">중요</div>';
+    h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;">';
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
     h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(v.l)+'</span>';
-    h += '<button data-toggle-imp="'+p.id+'" title="중요" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0;opacity:'+(p.important?'1':'.3')+';line-height:1;">🔴</button>';
+    h += '<div style="display:flex;gap:4px;flex-shrink:0;">';
+    h += btnRed(p.id, p.important);
+    h += btnGreen(p.id);
+    if (!cc.length && !isAtt) h += btnBlue(p.id, '처리완료');
+    h += '</div></div>';
+    h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;min-height:32px;white-space:pre-wrap;word-break:break-all;margin-bottom:8px;">'+esc(p.content)+'</div>';
+    h += '<div style="font-size:10px;color:#bbb;">'+fmt(p.createdAt)+'</div>';
     h += '</div>';
 
-    // 내용
-    h += '<div style="padding:3px 10px 8px;font-size:12px;color:#1a1a1a;line-height:1.6;min-height:56px;white-space:pre-wrap;word-break:break-all;cursor:grab;">'+esc(p.content)+'</div>';
-
-    h += '</div>'; // 부모 카드 본체 닫기
-
-    // 아들 카드들 — 계단식(20px) + 겹침(-12px) + 전체 라운드
-    children.forEach(function(c, ci) {
-      var cv = ROLE_DEF[c.role]||{l:c.role,color:'#f5f5f5',border:'#ddd',dot:'#aaa'};
-      var isLast = (ci === children.length-1) && !isAttaching;
+    cc.forEach(function(c, ci) {
+      var cv = ROLE_DEF[c.role] || { l:c.role, color:'#f5f5f5', border:'#ddd', dot:'#aaa' };
+      var isLast = (ci === cc.length-1) && !isAtt;
       var indent = (ci+1)*20;
       h += '<div style="margin-left:'+indent+'px;margin-top:-12px;">';
-      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 13px;box-shadow:0 3px 10px rgba(0,0,0,'+((0.06-(ci*0.01)).toFixed(2))+')">';
-      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">';
+      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);">';
+      h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
-      h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;">'+esc(cv.l)+'</span>';
-      h += '<span style="font-size:10px;color:#bbb;">'+fmt(c.createdAt)+'</span>';
-      if (isLast && myRole) {
-        h += '<button data-done-post="'+p.id+'" data-done-all="true" style="width:20px;height:20px;border-radius:50%;background:#3B82F6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="전체 처리완료">';
-        h += '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polyline points="1.5,4.5 3.5,6.5 7.5,2.5"/></svg></button>';
-      }
+      h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
+      h += '<span style="font-size:10px;color:#bbb;white-space:nowrap;margin-left:4px;">'+fmt(c.createdAt)+'</span>';
+      if (isLast && myRole) h += btnBlue(p.id, '전체 처리완료');
       h += '</div>';
       h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;white-space:pre-wrap;word-break:break-all;">'+esc(c.content)+'</div>';
       h += '</div></div>';
     });
 
-    // 붙이기 draft
-    if (isAttaching) h += renderAttachDraft(p.id);
+    if (isAtt) {
+      var cv2 = ROLE_DEF[myRole] || { color:'#f5f5f5', border:'#ddd' };
+      var ai = (cc.length+1)*20;
+      h += '<div style="margin-left:'+ai+'px;margin-top:-12px;">';
+      h += '<div style="background:'+cv2.color+';border:1.5px dashed '+cv2.border+';border-radius:12px;padding:10px 12px;">';
+      h += '<textarea id="attach-ta-'+p.id+'" placeholder="덧붙일 내용..." style="width:100%;min-height:60px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:none;color:#1a1a1a;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>';
+      h += '<div style="display:flex;gap:6px;margin-top:6px;">';
+      h += '<button data-attach-confirm="'+p.id+'" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 붙이기</button>';
+      h += '<button data-attach-cancel="'+p.id+'" style="padding:5px 10px;border-radius:6px;font-size:11px;background:none;border:0.5px solid #ddd;color:#888;cursor:pointer;">✕</button>';
+      h += '</div></div></div>';
+    }
 
-    // 푸터 — 최하단 고정
-    h += '<div style="background:'+v.color+';border:1px solid '+v.border+';border-top:none;border-radius:0 0 10px 10px;padding:6px 8px 8px;">';
-    h += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:'+(myRole?'6px':'0')+'">';
-    h += '<span style="font-size:10px;color:#aaa;flex:1;">'+fmt(p.createdAt)+'</span>';
-    if (myRole && !isAttaching) {
-      h += '<button data-attach-start="'+p.id+'" style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:500;background:#EFF6FF;color:#1D4ED8;border:0.5px solid #BFDBFE;cursor:pointer;">덧붙이기</button>';
-    }
     h += '</div>';
-    if (myRole) {
-      h += '<button data-done-post="'+p.id+'" style="width:100%;padding:5px 0;border-radius:6px;font-size:11px;font-weight:500;background:rgba(0,0,0,.06);color:#333;border:none;cursor:pointer;">✓ 처리완료</button>';
-    }
-    h += '</div>';
-    h += '</div>'; // .pab-card 닫기
     return h;
   }
 
-  // ── draft 카드 (인라인 작성) ──
   function renderDraftCard(pos) {
-    var v = myRole ? (ROLE_DEF[myRole]||{}) : { color:'#f5f5f5', border:'#ddd', dot:'#aaa', l:'작성' };
-    var h = '<div class="pab-card pab-draft" data-pid="__draft__" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:160px;z-index:'+(zCounter+50)+';box-sizing:border-box;pointer-events:all;">';
-    h += '<div style="background:'+v.color+';border:1.5px dashed '+v.border+';border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.12);">';
-
-    // 헤더
-    h += '<div style="display:flex;align-items:center;gap:5px;padding:8px 8px 3px;">';
+    var v = myRole?(ROLE_DEF[myRole]||{}):{color:'#f5f5f5',border:'#ddd',dot:'#aaa',l:'작성'};
+    var h = '<div class="pab-card pab-draft" data-pid="__draft__" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+CW+'px;z-index:'+(zCounter+50)+';pointer-events:all;box-sizing:border-box;">';
+    h += '<div style="background:'+(v.color||'#f5f5f5')+';border:1.5px dashed '+(v.border||'#ddd')+';border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.12);padding:11px 13px;">';
+    h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px;">';
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+(v.dot||'#aaa')+';flex-shrink:0;"></div>';
-    h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;">'+esc(v.l||'')+'</span>';
+    h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(v.l||'')+'</span>';
     h += '</div>';
-
-    // textarea (포스트잇 크기 그대로)
-    h += '<div style="padding:3px 10px 8px;">';
     h += '<textarea id="draft-ta" placeholder="내용 입력..." autofocus style="width:100%;min-height:80px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:none;color:#1a1a1a;padding:0;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>';
-    h += '</div>';
-
-    // 중요 + 버튼
-    h += '<div style="padding:0 8px 8px;border-top:0.5px solid '+v.border+';margin-top:2px;">';
-    h += '<label style="display:flex;align-items:center;gap:5px;margin-top:5px;cursor:pointer;font-size:10px;color:#B91C1C;">';
-    h += '<input type="checkbox" id="draft-imp" style="cursor:pointer;"> 🔴 중요</label>';
-    h += '<div style="display:flex;gap:6px;margin-top:6px;">';
+    h += '<div style="border-top:0.5px solid '+(v.border||'#ddd')+';margin-top:8px;padding-top:8px;">';
+    h += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;font-size:11px;color:#B91C1C;"><input type="checkbox" id="draft-imp" style="cursor:pointer;"> 🔴 중요 항목</label>';
+    h += '<div style="display:flex;gap:6px;">';
     h += '<button id="draft-confirm" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 등록</button>';
     h += '<button id="draft-cancel" style="padding:5px 10px;border-radius:6px;font-size:11px;background:none;border:0.5px solid #ddd;color:#888;cursor:pointer;">✕</button>';
     h += '</div></div></div></div>';
     return h;
   }
 
-  // ── 보드 렌더 ──
   function renderBoard() {
     var active = sortedActive();
     var desk = myRole ? loadDesk(myRole) : {};
-
-    // desk에 없는 포스트잇 자동 배치
     active.forEach(function(p) {
       if (!desk[p.id]) {
-        desk[p.id] = autoPlaceNew(myRole||'default', p.id);
+        var maxY=10, cols=Object.keys(desk).length;
+        Object.values(desk).forEach(function(d){ if(d.y+200>maxY) maxY=d.y+200; });
+        desk[p.id]={x:cols%2===0?10:182,y:maxY,z:zCounter++};
+        if (myRole) saveDesk(myRole,desk);
       }
     });
-
-    // 자식은 부모 DOM 내부 수직 배치 (별도 좌표 불필요)
-
-    // 캔버스 높이 계산 (자식 카드 포함)
-    var maxBottom = 300;
-    active.forEach(function(p) {
-      var pos = desk[p.id]||{y:0};
-      var childCount = childrenOf(p.id).length;
-      var cardH = 180 + childCount * 80 + (attachParentId===p.id ? 120 : 0);
-      if (pos.y + cardH > maxBottom) maxBottom = pos.y + cardH;
+    var maxBottom=320;
+    active.forEach(function(p){
+      var pos=desk[p.id]||{y:0};
+      var hh=130+(childrenOf(p.id).length+(attachParentId===p.id?1:0))*66;
+      if(pos.y+hh>maxBottom) maxBottom=pos.y+hh;
     });
-    if (draftId) maxBottom += 220;
-
-    var h = '<div id="pab-canvas" style="position:relative;width:100%;min-height:'+(maxBottom+60)+'px;touch-action:none;pointer-events:none;">';
-    // 부모 먼저, 자식 나중 (자식이 위에 보임)
-    active.forEach(function(p) {
-      var pos = desk[p.id]||{x:10,y:10,z:1};
-      h += renderCard(p, pos, desk);
-      // 자식 카드는 renderCard 내부에서 수직으로 처리됨
+    if (draftId) maxBottom+=200;
+    var h='<div id="pab-canvas" style="position:relative;width:100%;min-height:'+(maxBottom+60)+'px;touch-action:none;pointer-events:none;">';
+    active.forEach(function(p){
+      var pos=desk[p.id]||{x:10,y:10,z:1};
+      h+=renderCard(p,pos);
     });
-
-    // draft 카드
-    if (draftId && myRole) {
-      var draftPos = desk[draftId]||{x:10,y:10,z:zCounter+50};
-      h += renderDraftCard(draftPos);
+    if (draftId&&myRole){
+      var dp=desk['__draft__']||{x:10,y:10,z:zCounter+50};
+      h+=renderDraftCard(dp);
     }
-
-    if (!active.length && !draftId) {
-      h += '<div style="text-align:center;padding:60px 0;color:#bbb;font-size:13px;">포스트잇이 없습니다.<br>+ 작성 버튼으로 추가하세요.</div>';
-    }
-    h += '</div>';
+    if (!active.length&&!draftId) h+='<div style="text-align:center;padding:60px 20px;color:#bbb;font-size:13px;">포스트잇이 없습니다.<br>붙이기 버튼으로 추가하세요.</div>';
+    h+='</div>';
     return h;
   }
 
-  // ── 완료함 ──
   function renderArchive() {
-    var done = sortedDone();
-    var h = '<div style="padding:.5rem 0 1.5rem;">';
-    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">';
-    h += '<button data-view="board" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
-    h += '<div style="font-size:14px;font-weight:600;color:#1a1a1a;">완료함 ('+done.length+'건)</div></div>';
-    if (!done.length) { h += '<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">없습니다.</div>'; h += '</div>'; return h; }
-    done.forEach(function(p) {
-      var v = ROLE_DEF[p.role]||{l:p.role,color:'#f5f5f5',border:'#ddd'};
-      var dv = ROLE_DEF[p.done.byRole]||{l:p.done.byLabel||''};
-      var children2 = posts.filter(function(c){ return c.parentId===p.id; })
-                             .sort(function(a,b){ return new Date(a.createdAt)-new Date(b.createdAt); });
-      // 원 메모
-      h += '<div style="background:'+v.color+';border:1px solid '+v.border+';border-radius:'+(children2.length?'10px 10px 0 0':'10px')+';padding:12px 12px 10px;opacity:.7;">';
-      h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">';
-      h += '<div style="width:8px;height:8px;border-radius:50%;background:'+v.border+';"></div>';
-      h += '<span style="font-size:11px;font-weight:500;color:#555;">'+esc(v.l)+'</span>';
-      h += '<span style="font-size:10px;color:#bbb;margin-left:auto;">'+fmt(p.createdAt)+'</span></div>';
-      h += '<div style="font-size:12px;color:#555;line-height:1.6;white-space:pre-wrap;">'+esc(p.content)+'</div>';
-      h += '</div>';
-      // 붙인 메모 들여쓰기
-      // 덧붙인 메모 계단식
-      children2.forEach(function(c, ci) {
-        var cv = ROLE_DEF[c.role]||{l:c.role,color:'#f5f5f5',border:'#ddd'};
-        var indent = (ci+1)*20;
-        h += '<div style="margin-left:'+indent+'px;margin-top:-6px;opacity:.85;">';
-        h += '<div style="background:'+cv.color+';border:1px solid '+cv.border+';border-radius:10px;padding:8px 10px;box-shadow:0 2px 8px rgba(0,0,0,.08);">';
-        h += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">';
-        h += '<div style="width:6px;height:6px;border-radius:50%;background:'+cv.border+';"></div>';
-        h += '<span style="font-size:10px;font-weight:500;color:#555;">'+esc(cv.l)+'</span>';
-        h += '<span style="font-size:10px;color:#bbb;margin-left:auto;">'+fmt(c.createdAt)+'</span></div>';
-        h += '<div style="font-size:11px;color:#555;line-height:1.6;white-space:pre-wrap;">'+esc(c.content)+'</div>';
-        h += '</div></div>';
+    var done=donePosts();
+    var h='<div style="padding:.5rem 0 1.5rem;">';
+    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">';
+    h+='<button data-view="board" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
+    h+='<div style="font-size:14px;font-weight:600;color:#1a1a1a;">완료함 ('+done.length+'건)</div></div>';
+    if (!done.length) {
+      h+='<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">처리완료된 포스트잇이 없습니다.</div>';
+    } else {
+      done.forEach(function(p){
+        var v=ROLE_DEF[p.role]||{l:p.role,color:'#f5f5f5',border:'#ddd'};
+        var dv=ROLE_DEF[p.done.byRole]||{l:p.done.byLabel||p.done.by||''};
+        var kids=posts.filter(function(c){ return c.parentId===p.id; })
+                      .sort(function(a,b){ return new Date(a.createdAt)-new Date(b.createdAt); });
+        h+='<div style="margin-bottom:20px;">';
+        h+='<div style="background:'+v.color+';border:1.5px solid '+v.border+';border-radius:12px;padding:11px 13px;opacity:.72;box-shadow:0 3px 10px rgba(0,0,0,.08);">';
+        h+='<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;">';
+        h+='<div style="width:8px;height:8px;border-radius:50%;background:'+v.border+';"></div>';
+        h+='<span style="font-size:11px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(v.l)+'</span>';
+        h+='<span style="font-size:10px;color:#bbb;white-space:nowrap;">'+fmt(p.createdAt)+'</span></div>';
+        h+='<div style="font-size:12px;color:#555;line-height:1.6;white-space:pre-wrap;">'+esc(p.content)+'</div>';
+        if (!kids.length) h+=doneBadge(dv.l,p.done.at);
+        h+='</div>';
+        kids.forEach(function(c,ci){
+          var cv=ROLE_DEF[c.role]||{l:c.role,color:'#f5f5f5',border:'#ddd'};
+          var isLast=(ci===kids.length-1);
+          var indent=(ci+1)*20;
+          h+='<div style="margin-left:'+indent+'px;margin-top:-12px;">';
+          h+='<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;opacity:'+(0.78+ci*0.06)+';box-shadow:0 3px 10px rgba(0,0,0,.07);">';
+          h+='<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">';
+          h+='<div style="width:7px;height:7px;border-radius:50%;background:'+cv.border+';"></div>';
+          h+='<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
+          h+='<span style="font-size:10px;color:#bbb;white-space:nowrap;">'+fmt(c.createdAt)+'</span></div>';
+          h+='<div style="font-size:11px;color:#555;line-height:1.6;white-space:pre-wrap;">'+esc(c.content)+'</div>';
+          if (isLast) h+=doneBadge(dv.l,p.done.at);
+          h+='</div></div>';
+        });
+        h+='</div>';
       });
-      // 처리완료 배지
-      h += '<div style="margin-bottom:12px;padding:5px 10px;background:#F0FDF4;border:1px solid #86EFAC;border-top:none;border-radius:0 0 8px 8px;">';
-      h += '<span style="font-size:10px;color:#15803D;">✓ '+esc(dv.l)+' · '+fmt(p.done.at)+' 처리완료</span>';
-      h += '</div>';
-    });
-    h += '</div>';
+    }
+    h+='</div>';
     return h;
   }
 
-  // ── 메인 렌더 ──
   function render() {
-    var root = document.getElementById('board-root');
+    var root=document.getElementById('board-root');
     if (!root) return;
-    if (view === 'archive') { root.innerHTML = renderArchive(); bindEvents(root); return; }
-
-    var h = '<div style="padding:.5rem 0 1.5rem;">';
-    h += renderNotices();
-    h += renderRoleBar();
-    h += renderToolbar();
-    h += renderBoard();
-    if (!myRole) {
-      h += '<div style="text-align:center;margin-top:16px;">';
-      h += '<button data-view-register style="font-size:12px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;">처음 사용하시나요? 역할 등록하기</button>';
-      h += '</div>';
-    }
-    h += '</div>';
-    root.innerHTML = h;
+    if (view==='archive'){ root.innerHTML=renderArchive(); bindEvents(root); return; }
+    var h='<div style="padding:.5rem 0 1.5rem;">';
+    h+=renderNotices();
+    h+=renderRoleBar();
+    h+=renderToolbar();
+    h+=renderBoard();
+    if (!myRole) h+='<div style="text-align:center;margin-top:16px;"><button data-view-register style="font-size:12px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;">처음 사용하시나요? 역할 등록하기</button></div>';
+    h+='</div>';
+    root.innerHTML=h;
     bindEvents(root);
     bindDrag(root);
-
-    // draft textarea 자동 포커스
-    if (draftId) {
-      setTimeout(function(){
-        var ta = document.getElementById('draft-ta');
-        if (ta) { ta.focus(); ta.scrollIntoView({behavior:'smooth',block:'center'}); }
-      }, 50);
-    }
+    if (draftId) setTimeout(function(){ var ta=document.getElementById('draft-ta'); if(ta){ ta.focus(); ta.scrollIntoView({behavior:'smooth',block:'center'}); } },50);
   }
 
-  // ── 이벤트 바인딩 ──
   function bindEvents(root) {
-    // 공고 더보기
-    root.querySelectorAll('[data-expand]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var el = document.getElementById('nc-'+btn.dataset.expand);
-        if (!el) return;
-        if (btn.textContent.indexOf('더보기')>=0) { el.textContent=btn.dataset.full; btn.textContent='접기 ▲'; }
-        else { el.textContent=btn.dataset.full.slice(0,50)+'…'; btn.textContent='더보기 ▼'; }
+    root.querySelectorAll('[data-expand]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var el=document.getElementById('nc-'+btn.dataset.expand);
+        if(!el) return;
+        if(btn.textContent.indexOf('더보기')>=0){el.textContent=btn.dataset.full;btn.textContent='접기 ▲';}
+        else{el.textContent=btn.dataset.full.slice(0,50)+'…';btn.textContent='더보기 ▼';}
       });
     });
-
-    // 역할 선택
-    root.querySelectorAll('[data-select-role]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var k = btn.dataset.selectRole;
-        var appRole = window.appState&&window.appState.role;
-        var appMode = window.appState&&window.appState.mode;
-        if (!((appMode==='manager'&&k===appRole)||(appMode==='staff'&&k==='staff'))) return;
-        myRole = k; draftId=null; attachParentId=null; render();
+    root.querySelectorAll('[data-select-role]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var k=btn.dataset.selectRole,am=window.appState&&window.appState.mode,ar=window.appState&&window.appState.role;
+        if(!((am==='manager'&&k===ar)||(am==='staff'&&k==='staff'))) return;
+        myRole=k;draftId=null;attachParentId=null;render();
       });
     });
-
-    // 회원가입
-    var regBtn = root.querySelector('[data-view-register]');
-    if (regBtn) regBtn.addEventListener('click', function() {
-      showPinRegister(null, function(role) { myRole=role; render(); });
-    });
-
-    // 뷰 전환
-    root.querySelectorAll('[data-view]').forEach(function(btn) {
-      btn.addEventListener('click', function() { view=btn.dataset.view; render(); });
-    });
-
-    // 정렬
-    root.querySelectorAll('[data-sort]').forEach(function(btn) {
-      btn.addEventListener('click', function() { sortMode=btn.dataset.sort; render(); });
-    });
-
-    // 내책상
-    var deskBtn = root.querySelector('[data-mydesk]');
-    if (deskBtn) deskBtn.addEventListener('click', function() { applyMyDesk(); });
-
-    // + 작성 (인라인 draft)
-    var writeBtn = root.querySelector('[data-write]');
-    if (writeBtn) {
-      writeBtn.addEventListener('click', function() {
-        if (!myRole) return;
-        if (draftId) return; // 이미 작성 중
-        draftId = '__draft__';
-        attachParentId = null;
-        // 상단 중앙에 배치
-        var canvas = document.getElementById('pab-canvas');
-        var panel  = document.getElementById('panel-board');
-        var cw = canvas ? canvas.offsetWidth : 340;
-        var scrollTop = panel ? panel.scrollTop : 0;
-        var px = Math.max(0, Math.floor(cw/2) - 80);
-        var py = scrollTop + 30;
-        // 기존 카드와 겹치면 살짝 아래로
-        var desk = loadDesk(myRole);
-        Object.values(desk).forEach(function(p) {
-          if (Math.abs(p.x - px) < 100 && Math.abs(p.y - py) < 60) py += 70;
-        });
-        desk['__draft__'] = { x:px, y:py, z:zCounter++ };
-        saveDesk(myRole, desk);
+    var regBtn=root.querySelector('[data-view-register]');
+    if(regBtn) regBtn.addEventListener('click',function(){ showPinRegister(null,function(role){myRole=role;render();}); });
+    root.querySelectorAll('[data-view]').forEach(function(btn){ btn.addEventListener('click',function(){view=btn.dataset.view;render();}); });
+    root.querySelectorAll('[data-sort]').forEach(function(btn){ btn.addEventListener('click',function(){sortMode=btn.dataset.sort;render();}); });
+    var dk=root.querySelector('[data-mydesk]');
+    if(dk) dk.addEventListener('click',function(){render();});
+    var wb=root.querySelector('[data-write]');
+    if(wb){
+      wb.addEventListener('click',function(){
+        if(!myRole||draftId) return;
+        draftId='__draft__'; attachParentId=null;
+        var canvas=document.getElementById('pab-canvas');
+        var panel=document.getElementById('panel-board');
+        var cw=canvas?canvas.offsetWidth:340;
+        var st=panel?panel.scrollTop:0;
+        var px=Math.max(0,Math.floor(cw/2)-Math.floor(CW/2));
+        var py=st+30;
+        var desk=loadDesk(myRole);
+        Object.values(desk).forEach(function(d){ if(Math.abs(d.x-px)<100&&Math.abs(d.y-py)<60) py+=70; });
+        desk['__draft__']={x:px,y:py,z:zCounter++};
+        saveDesk(myRole,desk);
         render();
-        // draft 카드로 스크롤
-        setTimeout(function() {
-          var ta = document.getElementById('draft-ta');
-          if (ta) ta.scrollIntoView({ behavior:'smooth', block:'center' });
-        }, 60);
       });
     }
-
-    // draft 등록
-    var confirmBtn = root.querySelector('#draft-confirm');
-    if (confirmBtn) {
-      confirmBtn.addEventListener('click', function() {
-        var ta = root.querySelector('#draft-ta');
-        var content = ta ? ta.value.trim() : '';
-        if (!content || !myRole) { draftId=null; render(); return; }
-        var important = !!(root.querySelector('#draft-imp')||{}).checked;
-        var v = ROLE_DEF[myRole]||{};
-        var desk = loadDesk(myRole);
-        var pos = desk['__draft__']||{x:10,y:10,z:zCounter++};
-        var newId = Date.now()+'';
-        var newPost = { id:newId, content:content, author:v.l, role:myRole, important:important, createdAt:new Date().toISOString(), done:null, parentId:null };
-        // draft 위치를 새 포스트 id로 이전
-        delete desk['__draft__'];
-        desk[newId] = pos;
-        saveDesk(myRole, desk);
-        posts = [newPost].concat(posts);
-        savePosts(); draftId=null; render();
-      });
-    }
-
-    // draft 취소
-    var cancelBtn = root.querySelector('#draft-cancel');
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', function() {
-        var desk = loadDesk(myRole||'default');
-        delete desk['__draft__'];
-        saveDesk(myRole||'default', desk);
-        draftId=null; render();
-      });
-    }
-
-    // Ctrl+Enter → draft 등록
-    var draftTa = root.querySelector('#draft-ta');
-    if (draftTa) {
-      draftTa.addEventListener('keydown', function(e) {
-        if ((e.ctrlKey||e.metaKey) && e.key==='Enter') {
-          var cb = root.querySelector('#draft-confirm');
-          if (cb) cb.click();
-        }
-        if (e.key==='Escape') {
-          var cc = root.querySelector('#draft-cancel');
-          if (cc) cc.click();
-        }
-      });
-    }
-
-    // 중요 토글
-    root.querySelectorAll('[data-toggle-imp]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
+    var dc=root.querySelector('#draft-confirm');
+    if(dc) dc.addEventListener('click',function(){
+      var ta=root.querySelector('#draft-ta');
+      var content=ta?ta.value.trim():'';
+      if(!content||!myRole){draftId=null;render();return;}
+      var imp=!!(root.querySelector('#draft-imp')||{}).checked;
+      var v=ROLE_DEF[myRole]||{};
+      var desk=loadDesk(myRole);
+      var pos=desk['__draft__']||{x:10,y:10,z:zCounter++};
+      var nid=Date.now()+'';
+      posts=[{id:nid,content:content,author:v.l,role:myRole,important:imp,createdAt:new Date().toISOString(),done:null,parentId:null}].concat(posts);
+      delete desk['__draft__']; desk[nid]=pos; saveDesk(myRole,desk);
+      savePosts(); draftId=null; render();
+    });
+    var dcc=root.querySelector('#draft-cancel');
+    if(dcc) dcc.addEventListener('click',function(){
+      var desk=loadDesk(myRole||'x'); delete desk['__draft__']; saveDesk(myRole||'x',desk);
+      draftId=null; render();
+    });
+    var dta=root.querySelector('#draft-ta');
+    if(dta) dta.addEventListener('keydown',function(e){
+      if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){var c=root.querySelector('#draft-confirm');if(c)c.click();}
+      if(e.key==='Escape'){var cc=root.querySelector('#draft-cancel');if(cc)cc.click();}
+    });
+    root.querySelectorAll('[data-toggle-imp]').forEach(function(btn){
+      btn.addEventListener('click',function(e){
         e.stopPropagation();
-        var id = btn.dataset.toggleImp;
-        posts = posts.map(function(p){ return p.id===id ? Object.assign({},p,{important:!p.important}) : p; });
-        savePosts(); render();
+        var id=btn.dataset.toggleImp;
+        posts=posts.map(function(p){return p.id===id?Object.assign({},p,{important:!p.important}):p;});
+        savePosts();render();
       });
     });
-
-    // 붙이기 시작
-    root.querySelectorAll('[data-attach-start]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
+    root.querySelectorAll('[data-attach-start]').forEach(function(btn){
+      btn.addEventListener('click',function(e){
         e.stopPropagation();
-        if (!myRole) return;
-        var pid = btn.dataset.attachStart;
-        attachParentId = (attachParentId===pid) ? null : pid;
-        draftId = null; render();
-        setTimeout(function(){
-          var ta = document.getElementById('attach-ta-'+pid);
-          if (ta) ta.focus();
-        }, 50);
+        if(!myRole) return;
+        var pid=btn.dataset.attachStart;
+        attachParentId=(attachParentId===pid)?null:pid;
+        draftId=null;render();
+        setTimeout(function(){var ta=document.getElementById('attach-ta-'+pid);if(ta)ta.focus();},50);
       });
     });
-
-    // 붙이기 확정
-    root.querySelectorAll('[data-attach-confirm]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
+    root.querySelectorAll('[data-attach-confirm]').forEach(function(btn){
+      btn.addEventListener('click',function(e){
         e.stopPropagation();
-        var pid = btn.dataset.attachConfirm;
-        var ta = document.getElementById('attach-ta-'+pid);
-        var content = ta ? ta.value.trim() : '';
-        if (!content || !myRole) { attachParentId=null; render(); return; }
-        var v = ROLE_DEF[myRole]||{};
-        var child = { id:Date.now()+'', content:content, author:v.l, role:myRole, important:false, createdAt:new Date().toISOString(), done:null, parentId:pid };
-        posts = posts.concat([child]);
-        savePosts(); attachParentId=null; render();
+        var pid=btn.dataset.attachConfirm;
+        var ta=document.getElementById('attach-ta-'+pid);
+        var content=ta?ta.value.trim():'';
+        if(!content||!myRole){attachParentId=null;render();return;}
+        var v=ROLE_DEF[myRole]||{};
+        posts=posts.concat([{id:Date.now()+'',content:content,author:v.l,role:myRole,important:false,createdAt:new Date().toISOString(),done:null,parentId:pid}]);
+        savePosts();attachParentId=null;render();
       });
     });
-
-    // 붙이기 취소
-    root.querySelectorAll('[data-attach-cancel]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        attachParentId=null; render();
-      });
+    root.querySelectorAll('[data-attach-cancel]').forEach(function(btn){
+      btn.addEventListener('click',function(e){e.stopPropagation();attachParentId=null;render();});
     });
-
-    // 처리완료 (자식 일괄 포함)
-    root.querySelectorAll('[data-done-post]').forEach(function(btn) {
-      btn.addEventListener('click', function(e) {
+    root.querySelectorAll('[data-done-post]').forEach(function(btn){
+      btn.addEventListener('click',function(e){
         e.stopPropagation();
-        if (!myRole) return;
-        var id = btn.dataset.donePost;
-        var v = ROLE_DEF[myRole]||{};
-        var doneInfo = { by:myRole, byRole:myRole, byLabel:v.l, at:new Date().toISOString() };
-        posts = posts.map(function(p) {
-          if (p.id===id || p.parentId===id) return Object.assign({},p,{done:doneInfo});
-          return p;
-        });
-        // desk 정리
-        if (myRole) {
-          var desk = loadDesk(myRole);
-          delete desk[id];
-          saveDesk(myRole, desk);
+        if(!myRole) return;
+        var id=btn.dataset.donePost;
+        var v=ROLE_DEF[myRole]||{};
+        var di={by:myRole,byRole:myRole,byLabel:v.l,at:new Date().toISOString()};
+        posts=posts.map(function(p){return(p.id===id||p.parentId===id)?Object.assign({},p,{done:di}):p;});
+        if(myRole){var desk=loadDesk(myRole);delete desk[id];saveDesk(myRole,desk);}
+        var dp2=posts.filter(function(p){return !!p.done&&!p.parentId;});
+        if(dp2.length>30){
+          var rids=dp2.sort(function(a,b){return new Date(a.done.at)-new Date(b.done.at);}).slice(0,dp2.length-30).map(function(p){return p.id;});
+          posts=posts.filter(function(p){return rids.indexOf(p.id)<0&&rids.indexOf(p.parentId)<0;});
         }
-        // 완료 30건 제한
-        var donePosts = posts.filter(function(p){ return !!p.done&&!p.parentId; });
-        if (donePosts.length>30) {
-          var oldest = donePosts.sort(function(a,b){ return new Date(a.done.at)-new Date(b.done.at); });
-          var removeIds = oldest.slice(0,donePosts.length-30).map(function(p){ return p.id; });
-          posts = posts.filter(function(p){ return removeIds.indexOf(p.id)<0 && removeIds.indexOf(p.parentId)<0; });
-        }
-        savePosts(); render();
+        savePosts();render();
       });
     });
   }
 
-  // ── 드래그 (부모 카드만, 자식 자동 동반) ──
-  function bindDrag(root) {
-    var canvas = root.querySelector('#pab-canvas');
-    if (!canvas) return;
-    var dragging=null, startX, startY, origX, origY, moved=false;
-
-    function onStart(e) {
-      var card = e.target.closest('.pab-card');
-      if (!card || card.classList.contains('pab-draft')) return;
-      if (e.target.closest('button')||e.target.closest('textarea')||e.target.closest('input')||e.target.closest('label')) return;
+  function bindDrag(root){
+    var canvas=root.querySelector('#pab-canvas');
+    if(!canvas) return;
+    var dragging=null,sx,sy,ox,oy,moved=false;
+    function onStart(e){
+      var card=e.target.closest('.pab-card');
+      if(!card||card.classList.contains('pab-draft')) return;
+      if(e.target.closest('button')||e.target.closest('textarea')||e.target.closest('input')||e.target.closest('label')) return;
       e.preventDefault();
-      var touch = e.touches?e.touches[0]:e;
-      dragging = card; moved = false;
-      startX = touch.clientX; startY = touch.clientY;
-      var id = card.dataset.pid;
-      var desk = myRole?loadDesk(myRole):{};
-      origX = desk[id]?desk[id].x:0;
-      origY = desk[id]?desk[id].y:0;
-      zCounter++;
-      card.style.zIndex = zCounter+100;
-      card.style.cursor = 'grabbing';
+      var t=e.touches?e.touches[0]:e;
+      dragging=card;moved=false;sx=t.clientX;sy=t.clientY;
+      var id=card.dataset.pid,desk=myRole?loadDesk(myRole):{};
+      ox=desk[id]?desk[id].x:0;oy=desk[id]?desk[id].y:0;
+      zCounter++;card.style.zIndex=zCounter+100;card.style.cursor='grabbing';
     }
-    function onMove(e) {
-      if (!dragging) return;
+    function onMove(e){
+      if(!dragging) return;
       e.preventDefault();
-      var touch = e.touches?e.touches[0]:e;
-      var dx = touch.clientX-startX, dy = touch.clientY-startY;
-      if (Math.abs(dx)>5||Math.abs(dy)>5) moved=true;
-      if (!moved) return;
-      var newX = Math.max(0, origX+dx);
-      var newY = Math.max(0, origY+dy);
-      dragging.style.left = newX+'px';
-      dragging.style.top  = newY+'px';
-      dragging.style.transition = 'none';
+      var t=e.touches?e.touches[0]:e;
+      var dx=t.clientX-sx,dy=t.clientY-sy;
+      if(Math.abs(dx)>5||Math.abs(dy)>5) moved=true;
+      if(!moved) return;
+      dragging.style.left=Math.max(0,ox+dx)+'px';
+      dragging.style.top=Math.max(0,oy+dy)+'px';
+      dragging.style.transition='none';
     }
-    function onEnd() {
-      if (!dragging) return;
-      var id = dragging.dataset.pid;
-      if (moved && myRole) {
-        var newX = parseInt(dragging.style.left)||0;
-        var newY = parseInt(dragging.style.top)||0;
-        setDeskPos(myRole, id, newX, newY, zCounter);
-      }
-      dragging.style.cursor = 'grab';
-      dragging = null; moved = false;
+    function onEnd(){
+      if(!dragging) return;
+      var id=dragging.dataset.pid;
+      if(moved&&myRole){var nx=parseInt(dragging.style.left)||0,ny=parseInt(dragging.style.top)||0;var desk=loadDesk(myRole);desk[id]={x:nx,y:ny,z:zCounter};saveDesk(myRole,desk);}
+      dragging.style.cursor='grab';dragging=null;moved=false;
     }
-
-    canvas.addEventListener('mousedown',  onStart);
-    canvas.addEventListener('touchstart', onStart, {passive:false});
-    if (window._pabDragClean) window._pabDragClean();
-    window.addEventListener('mousemove',  onMove);
-    window.addEventListener('touchmove',  onMove, {passive:false});
-    window.addEventListener('mouseup',    onEnd);
-    window.addEventListener('touchend',   onEnd);
-    window._pabDragClean = function() {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('mouseup',   onEnd);
-      window.removeEventListener('touchend',  onEnd);
-    };
+    canvas.addEventListener('mousedown',onStart);
+    canvas.addEventListener('touchstart',onStart,{passive:false});
+    if(window._pabDragClean) window._pabDragClean();
+    window.addEventListener('mousemove',onMove);
+    window.addEventListener('touchmove',onMove,{passive:false});
+    window.addEventListener('mouseup',onEnd);
+    window.addEventListener('touchend',onEnd);
+    window._pabDragClean=function(){window.removeEventListener('mousemove',onMove);window.removeEventListener('touchmove',onMove);window.removeEventListener('mouseup',onEnd);window.removeEventListener('touchend',onEnd);};
   }
 
-  // ── 초기화 ──
-  function init() {
-    var appRole = window.appState&&window.appState.role;
-    var appMode = window.appState&&window.appState.mode;
-    if (appMode==='manager'&&appRole) myRole=appRole;
-    else if (appMode==='staff') myRole='staff';
-    loadLocal(); render();
-    syncGAS().then(function(){ render(); });
+  function init(){
+    var am=window.appState&&window.appState.mode,ar=window.appState&&window.appState.role;
+    if(am==='manager'&&ar) myRole=ar;
+    else if(am==='staff') myRole='staff';
+    loadLocal();render();
+    syncGAS().then(function(){render();});
   }
 
-  window._boardRefresh = function() {
-    var appRole = window.appState&&window.appState.role;
-    var appMode = window.appState&&window.appState.mode;
-    if (appMode==='manager'&&appRole) myRole=appRole;
-    else if (appMode==='staff') myRole='staff';
+  window._boardRefresh=function(){
+    var am=window.appState&&window.appState.mode,ar=window.appState&&window.appState.role;
+    if(am==='manager'&&ar) myRole=ar;
+    else if(am==='staff') myRole='staff';
     else myRole=null;
-    view='board'; draftId=null; attachParentId=null;
-    loadLocal(); render();
-    syncGAS().then(function(){ render(); });
+    view='board';draftId=null;attachParentId=null;
+    loadLocal();render();
+    syncGAS().then(function(){render();});
   };
 
   init();
