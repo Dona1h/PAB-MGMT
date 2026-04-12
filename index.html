@@ -93,8 +93,8 @@
   <button class="tab-btn" data-tab="calendar">📅 월중등록 달력</button>
   <button class="tab-btn" data-tab="kids">🧒 키즈 회차계산기</button>
   <button class="tab-btn" data-tab="refund">💸 환불 계산기</button>
-  <button class="tab-btn" data-tab="change">🔄 반변경 계산기</button>
   <button class="tab-btn" data-tab="board" id="tab-board-btn" style="display:none;">📌 포스트잇</button>
+  <button class="tab-btn" data-tab="change">🔄 반변경 계산기</button>
 </div>
 
 <!-- Tab 1: 가격표 -->
@@ -1023,17 +1023,37 @@ function initBoard() {
     return h;
   }
 
+  // 그리드 카드폭 계산
+  function getGridLayout() {
+    var root = document.getElementById('board-root');
+    var cw = (root && root.offsetWidth > 0) ? root.offsetWidth : window.innerWidth;
+    var pad = 16; // 패딩 고려
+    var w = cw - pad;
+    var gap = 12;
+    var cols = w < 380 ? 1 : w < 580 ? 2 : w < 860 ? 3 : 4;
+    var cardW = Math.floor((w - gap*(cols-1)) / cols);
+    cardW = Math.max(140, Math.min(cardW, 280));
+    return { cols:cols, cardW:cardW, gap:gap };
+  }
+
   function renderBoard() {
     var active = sortedActive();
 
-    // ── 흐름 레이아웃 (중요순 / 시간순) ──
+    // ── 그리드 레이아웃 (중요순 / 시간순) ──
     if (sortMode !== 'mydesk') {
-      var h = '<div id="board-flow" style="display:flex;flex-direction:column;gap:16px;">';
+      var gl = getGridLayout();
+      var h = '<div id="board-grid" style="display:flex;flex-wrap:wrap;gap:'+gl.gap+'px;align-items:flex-start;">';
+      if (draftId && myRole) {
+        h += '<div style="flex:0 0 '+gl.cardW+'px;min-width:0;">';
+        h += renderDraftCardGrid(gl.cardW);
+        h += '</div>';
+      }
       active.forEach(function(p) {
-        h += renderCardFlow(p);
+        h += '<div style="flex:0 0 '+gl.cardW+'px;min-width:0;">';
+        h += renderCardGrid(p, gl.cardW);
+        h += '</div>';
       });
-      if (draftId && myRole) h += renderDraftCardFlow();
-      if (!active.length && !draftId) h += '<div style="text-align:center;padding:60px 20px;color:#bbb;font-size:13px;">포스트잇이 없습니다.<br>붙이기 버튼으로 추가하세요.</div>';
+      if (!active.length && !draftId) h += '<div style="text-align:center;padding:60px 20px;color:#bbb;font-size:13px;width:100%;">포스트잇이 없습니다.<br>붙이기 버튼으로 추가하세요.</div>';
       h += '</div>';
       return h;
     }
@@ -1069,8 +1089,8 @@ function initBoard() {
     return h;
   }
 
-  // ── 흐름 레이아웃용 카드 (renderCard와 동일하되 position 없음) ──
-  function renderCardFlow(p) {
+  // ── 그리드 레이아웃용 카드 ──
+  function renderCardGrid(p, cardW) {
     var v = ROLE_DEF[p.role] || { l:p.role, color:'#f5f5f5', border:'#ddd', dot:'#aaa' };
     var cc = childrenOf(p.id);
     var isAtt = (attachParentId === p.id);
@@ -1102,7 +1122,7 @@ function initBoard() {
       var isLast = (ci === cc.length-1) && !isAtt;
       var childOp = (0.90 + ci*0.04).toFixed(2);
       h += '<div style="margin-top:-12px;position:relative;z-index:'+(ci+2)+';">';
-      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);opacity:'+childOp+';">';
+      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);opacity:'+childOp+';width:100%;box-sizing:border-box;">';
       h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
       h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
@@ -1134,8 +1154,8 @@ function initBoard() {
     return h;
   }
 
-  // ── 흐름 레이아웃용 draft 카드 ──
-  function renderDraftCardFlow() {
+  // ── 그리드 레이아웃용 draft 카드 ──
+  function renderDraftCardGrid(cardW) {
     var v = myRole?(ROLE_DEF[myRole]||{}):{color:'#f5f5f5',border:'#ddd',dot:'#aaa',l:'작성'};
     var h = '<div style="pointer-events:all;">';
     h += '<div style="background:'+(v.color||'#f5f5f5')+';border:1.5px dashed '+(v.border||'#ddd')+';border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.12);padding:11px 13px;">';
@@ -1378,6 +1398,14 @@ function initBoard() {
     loadLocal();render();
     syncGAS().then(function(){render();});
   }
+
+  // 리사이즈 시 정렬 모드 재렌더
+  var _resizeTimer = null;
+  window.addEventListener('resize', function() {
+    if (sortMode === 'mydesk') return;
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(function() { render(); }, 300);
+  });
 
   window._boardRefresh=function(){
     var am=window.appState&&window.appState.mode,ar=window.appState&&window.appState.role;
