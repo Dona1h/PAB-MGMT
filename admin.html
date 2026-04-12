@@ -87,7 +87,7 @@ const MKEY = 'pab-msgs-v1';
 const NKEY = 'pab-notices-v1';
 const SKEY = 'pab-settings-v1';
 // adminHash는 settings 안에서 관리 (GAS 동기화됨)
-const ITER = 100000;
+const ITER = 10000;
 const PIN_SALT = 'pab_pin_salt_2025';
 
 const ROLES = {
@@ -469,10 +469,11 @@ function bindAuth() {
     if (p1.length < 4) { err.textContent='4자 이상 입력해 주세요.'; return; }
     if (p1 !== p2) { err.textContent='비밀번호가 일치하지 않습니다.'; return; }
     err.textContent='설정 중...'; err.style.color='#F59E0B';
-    settings.adminHash = await hashPw(p1); ls_set(SKEY, settings); gasWrite('saveSettings', settings);
+    settings.adminHash = await hashPw(p1);
+    ls_set(SKEY, settings);
+    gasWrite('saveSettings', settings);
     isAuth = true; view = 'main';
     render();
-    loadAll().then(() => render());
   });
   const loginBtn = app.querySelector('#btn-login');
   loginBtn?.addEventListener('click', async () => {
@@ -484,7 +485,14 @@ function bindAuth() {
     if (ok) {
       isAuth = true; view = 'main';
       render();
-      loadAll().then(() => render());
+      // 백그라운드 데이터 동기화
+      Promise.all([gasRead('getMsgs'), gasRead('getNotices'), gasRead('getPosts')]).then(function(res) {
+        if(res[0]){ msgs=res[0]; ls_set(MKEY,res[0]); }
+        if(res[1]){ notices=res[1]; ls_set(NKEY,res[1]); }
+        if(res[2]){ posts=res[2]; ls_set('pab-posts-v1',res[2]); }
+        syncStatus = '☁ ' + new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) + ' 동기화';
+        render();
+      });
     } else { err.textContent='비밀번호가 올바르지 않습니다.'; err.style.color='#EF4444'; }
   });
   app.querySelector('#pw')?.addEventListener('keydown', e => { if (e.key==='Enter' && loginBtn) loginBtn.click(); });
@@ -566,12 +574,28 @@ function bindMain() {
   });
 }
 
-// ── 시작: localStorage 먼저 표시 후 GAS 동기화 ──
-msgs = ls_get(MKEY, []); notices = ls_get(NKEY, []); settings = ls_get(SKEY, {pins:{}});
+// ── 시작: localStorage 즉시 → GAS 백그라운드 ──
+msgs     = ls_get(MKEY, []);
+notices  = ls_get(NKEY, []);
+settings = ls_get(SKEY, {pins:{}, adminHash:''});
+posts    = ls_get('pab-posts-v1', []);
 if (!settings.pins) settings.pins = {};
-render();
-// 이미 로그인 상태(새로고침)면 GAS 동기화
-if (isAuth) loadAll().then(() => render());
+render(); // 즉시 표시
+
+// GAS에서 Settings 먼저 (비밀번호 확인용)
+gasRead('getSettings').then(function(s) {
+  if (s) { settings = s; ls_set(SKEY, s); if(!settings.pins) settings.pins={}; if(!settings.adminHash) settings.adminHash=''; render(); }
+  // 나머지 백그라운드 로드
+  if (isAuth) {
+    Promise.all([gasRead('getMsgs'), gasRead('getNotices'), gasRead('getPosts')]).then(function(res) {
+      if(res[0]){ msgs=res[0]; ls_set(MKEY,res[0]); }
+      if(res[1]){ notices=res[1]; ls_set(NKEY,res[1]); }
+      if(res[2]){ posts=res[2]; ls_set('pab-posts-v1',res[2]); }
+      syncStatus = '☁ ' + new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}) + ' 동기화';
+      render();
+    });
+  }
+}).catch(function(){ syncStatus = '⚠ GAS 연결 안됨'; });
 </script>
 </body>
 </html>
