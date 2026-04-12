@@ -808,6 +808,7 @@ function initBoard() {
   };
   var ROLE_KEYS = ['morning','afternoon','evening','staff'];
   var CW = 165;
+  function getCardWidth() { return getGridLayout().cardW; }
 
   var myRole = null;
   var posts = [], notices = [], settings = { pins:{} };
@@ -945,7 +946,8 @@ function initBoard() {
       ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 4px 16px rgba(239,68,68,.15);'
       : 'border:1.5px solid '+v.border+';box-shadow:0 3px 12px rgba(0,0,0,.09);';
 
-    var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+CW+'px;z-index:'+pos.z+';box-sizing:border-box;pointer-events:all;">';
+    var cardW = getCardWidth();
+    var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+cardW+'px;z-index:'+pos.z+';box-sizing:border-box;pointer-events:all;">';
     var parentOpacity = (cc.length > 0) ? 'opacity:0.85;' : '';
     h += '<div style="background:'+v.color+';border-radius:12px;'+bStyle+'padding:11px 13px;'+parentOpacity+'">';
     if (p.important) h += '<div style="background:#EF4444;margin:-11px -13px 9px;padding:3px 10px;border-radius:10px 10px 0 0;font-size:10px;font-weight:600;color:#fff;">중요</div>';
@@ -1011,7 +1013,7 @@ function initBoard() {
 
   function renderDraftCard(pos) {
     var v = myRole?(ROLE_DEF[myRole]||{}):{color:'#f5f5f5',border:'#ddd',dot:'#aaa',l:'작성'};
-    var h = '<div class="pab-card pab-draft" data-pid="__draft__" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+CW+'px;z-index:'+(zCounter+50)+';pointer-events:all;box-sizing:border-box;">';
+    var h = '<div class="pab-card pab-draft" data-pid="__draft__" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+getCardWidth()+'px;z-index:'+(zCounter+50)+';pointer-events:all;box-sizing:border-box;">';
     h += '<div style="background:'+(v.color||'#f5f5f5')+';border:1.5px dashed '+(v.border||'#ddd')+';border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.12);padding:11px 13px;">';
     h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px;">';
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+(v.dot||'#aaa')+';flex-shrink:0;"></div>';
@@ -1267,7 +1269,7 @@ function initBoard() {
         var panel=document.getElementById('panel-board');
         var cw=canvas?canvas.offsetWidth:340;
         var st=panel?panel.scrollTop:0;
-        var px=Math.max(0,Math.floor(cw/2)-Math.floor(CW/2));
+        var px=Math.max(0,Math.floor(cw/2)-Math.floor(getCardWidth()/2));
         var py=st+30;
         var desk=loadDesk(myRole);
         Object.values(desk).forEach(function(d){ if(Math.abs(d.x-px)<100&&Math.abs(d.y-py)<60) py+=70; });
@@ -1367,9 +1369,9 @@ function initBoard() {
       var id=card.dataset.pid,desk=myRole?loadDesk(myRole):{};
       ox=desk[id]?desk[id].x:0;oy=desk[id]?desk[id].y:0;
       zCounter++;card.style.zIndex=zCounter+100;card.style.cursor='grabbing';
-      // 드래그 시작: 다른 카드 흐리게
+      // 드래그 시작: 이전 overlap opacity 초기화
       canvas.querySelectorAll('.pab-card').forEach(function(c){
-        if(c!==card) c.style.opacity='0.55';
+        c.style.opacity = '';
       });
     }
     function onMove(e){
@@ -1382,16 +1384,27 @@ function initBoard() {
       dragging.style.left=Math.max(0,ox+dx)+'px';
       dragging.style.top=Math.max(0,oy+dy)+'px';
       dragging.style.transition='none';
+      // 드래그 중 opacity 변경 없음 (종료 시 적용)
     }
     function onEnd(){
       if(!dragging) return;
       var id=dragging.dataset.pid;
       if(moved&&myRole){var nx=parseInt(dragging.style.left)||0,ny=parseInt(dragging.style.top)||0;var desk=loadDesk(myRole);desk[id]={x:nx,y:ny,z:zCounter};saveDesk(myRole,desk);}
       dragging.style.cursor='grab';
-      // 드래그 종료: 모든 카드 opacity 복원
-      canvas.querySelectorAll('.pab-card').forEach(function(c){
-        c.style.opacity='';
-      });
+      // 드래그 종료: 겹침 감지 → opacity 적용
+      if (moved) {
+        var dropRect = dragging.getBoundingClientRect();
+        canvas.querySelectorAll('.pab-card').forEach(function(c){
+          if (c === dragging) return;
+          var r = c.getBoundingClientRect();
+          var overlaps = dropRect.left<r.right && dropRect.right>r.left
+                      && dropRect.top<r.bottom && dropRect.bottom>r.top;
+          if (overlaps) {
+            c.style.opacity = '0.88';
+            dragging.style.opacity = '0.94';
+          }
+        });
+      }
       dragging=null;moved=false;
     }
     canvas.addEventListener('mousedown',onStart);
