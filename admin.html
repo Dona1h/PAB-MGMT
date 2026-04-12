@@ -39,7 +39,7 @@ button,input,select,textarea{ font-family:inherit; }
 
 <script>
 // ── GAS 통신 v2 (JSONP + GET write) ──
-const GAS_URL   = 'https://script.google.com/macros/s/AKfycbw-bGN4TQDrVHS1D9LlH7ZTqJ8cjvkDjkjAmkeIOIivkuv7PmTfhqLWBg6cTP1XfuYb/exec';
+const GAS_URL   = 'https://script.google.com/macros/s/AKfycbzQTZ5oXtWUaOXXyS9rKeX7UMXleV1lJzDgx6FfhBqm8VH9z1wj8Z8DWDODr7yjr70/exec';
 const GAS_TOKEN = 'pab2024';
 
 function gasRead(action) {
@@ -103,12 +103,13 @@ const ALL = ['morning','afternoon','evening'];
 
 // ── 상태 ──
 let isAuth = false, view = 'auth';
-let msgs = [], notices = [], settings = { pins: {} };
+let msgs = [], notices = [], settings = { pins: {} }, posts = [];
 
 // ── 데이터 로드/저장 ──
 async function loadAll() {
-  const [m, n, s] = await Promise.all([gasRead('getMsgs'), gasRead('getNotices'), gasRead('getSettings')]);
+  const [m, n, s, pb] = await Promise.all([gasRead('getMsgs'), gasRead('getNotices'), gasRead('getSettings'), gasRead('getPosts')]);
   if (m) { msgs = m;        ls_set(MKEY, m); } else msgs     = ls_get(MKEY, []);
+  if (pb){ posts = pb;      ls_set('pab-posts-v1', pb); } else posts = ls_get('pab-posts-v1', []);
   if (n) { notices = n;     ls_set(NKEY, n); } else notices  = ls_get(NKEY, []);
   if (s) { settings = s;    ls_set(SKEY, s); } else settings = ls_get(SKEY, { pins: {} });
   if (!settings.pins) settings.pins = {};
@@ -229,6 +230,13 @@ function renderMain() {
       <div class="menu-sub" style="color:#7E22CE;">게시 중</div>
     </button>
   </div>
+  <button class="menu" data-view="poststats" style="width:100%;margin-bottom:10px;">
+    <div class="menu-lbl" style="margin-bottom:5px;">포스트잇 현황</div>
+    <div style="display:flex;gap:10px;">
+      <span style="font-size:11px;color:#888;">활성 <b style="color:#1a1a1a;">${totalPosts}</b>건</span>
+      <span style="font-size:11px;color:#888;">완료 <b style="color:#15803D;">${totalDone}</b>건</span>
+    </div>
+  </button>
   <button class="menu" style="width:100%;margin-bottom:10px;" data-view="pins">
     <div class="menu-lbl" style="margin-bottom:6px;">매니저 PIN 관리</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -378,6 +386,50 @@ function renderPins() {
   return h;
 }
 
+function renderPostStats() {
+  var ROLE_KEYS_A = ['morning','afternoon','evening','staff'];
+  var ROLE_LABELS = { morning:'오전 매니저님', afternoon:'오후 매니저님', evening:'저녁 매니저님', staff:'직원' };
+  var ROLE_COLORS = { morning:'#FFF0ED', afternoon:'#FFFDE7', evening:'#F0FFF4', staff:'#EFF6FF' };
+  var ROLE_BORDERS = { morning:'#FFBCAA', afternoon:'#FFE082', evening:'#86EFAC', staff:'#BFDBFE' };
+  var h = '<div class="nav"><button class="nav-back" data-view="main">←</button><div class="nav-title">포스트잇 현황</div></div>';
+  var total = posts.filter(function(p){ return !p.done; }).length;
+  var done  = posts.filter(function(p){ return  p.done; }).length;
+  h += '<div class="card" style="background:#f8f9fa;margin-bottom:14px;">';
+  h += '<div style="display:flex;gap:20px;">';
+  h += '<div style="text-align:center;"><div style="font-size:24px;font-weight:700;color:#1a1a1a;">'+total+'</div><div style="font-size:11px;color:#888;">활성 포스트잇</div></div>';
+  h += '<div style="text-align:center;"><div style="font-size:24px;font-weight:700;color:#15803D;">'+done+'</div><div style="font-size:11px;color:#888;">처리 완료</div></div>';
+  h += '<div style="text-align:center;"><div style="font-size:24px;font-weight:700;color:#1a1a1a;">'+(total+done)+'</div><div style="font-size:11px;color:#888;">전체</div></div>';
+  h += '</div></div>';
+  ROLE_KEYS_A.forEach(function(k) {
+    var label = ROLE_LABELS[k];
+    var myTotal = posts.filter(function(p){ return p.role===k; }).length;
+    var myDone  = posts.filter(function(p){ return p.role===k && p.done; }).length;
+    var myActive = myTotal - myDone;
+    if (!myTotal) return;
+    h += '<div class="card" style="background:'+ROLE_COLORS[k]+';border-color:'+ROLE_BORDERS[k]+';">';
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
+    h += '<div style="font-size:13px;font-weight:500;">'+label+'</div>';
+    h += '<span style="font-size:11px;color:#888;">총 '+myTotal+'건</span></div>';
+    h += '<div style="display:flex;gap:14px;">';
+    h += '<div><div style="font-size:18px;font-weight:700;color:#1a1a1a;">'+myActive+'</div><div style="font-size:10px;color:#888;">작성/활성</div></div>';
+    h += '<div><div style="font-size:18px;font-weight:700;color:#15803D;">'+myDone+'</div><div style="font-size:10px;color:#888;">처리완료</div></div>';
+    h += '</div>';
+    // 최근 포스트잇
+    var recent = posts.filter(function(p){ return p.role===k && !p.done; }).slice(0,3);
+    if (recent.length) {
+      h += '<div style="margin-top:10px;border-top:0.5px solid '+ROLE_BORDERS[k]+';padding-top:8px;">';
+      recent.forEach(function(p) {
+        h += '<div style="font-size:11px;color:#333;padding:3px 0;border-bottom:0.5px solid rgba(0,0,0,.05);">';
+        h += (p.important?'🔴 ':'') + p.content.slice(0,40) + (p.content.length>40?'…':'');
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+  });
+  return h;
+}
+
 function renderChangePw() {
   return `<div class="nav"><button class="nav-back" data-view="main">←</button><div class="nav-title">비밀번호 변경</div></div>
   <div class="card">
@@ -402,6 +454,7 @@ function render() {
     case 'notice':    app.innerHTML = renderNotice();   break;
     case 'pins':      app.innerHTML = renderPins();     break;
     case 'change-pw': app.innerHTML = renderChangePw(); break;
+    case 'poststats': app.innerHTML = renderPostStats(); break;
     default:          app.innerHTML = renderMain();
   }
   bindMain();
