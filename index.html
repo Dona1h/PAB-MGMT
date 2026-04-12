@@ -948,8 +948,11 @@ function initBoard() {
 
     var cardW = getCardWidth();
     var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+cardW+'px;z-index:'+pos.z+';box-sizing:border-box;pointer-events:all;">';
-    var parentOpacity = (cc.length > 0) ? 'opacity:0.72;' : '';
-    h += '<div style="background:'+v.color+';border-radius:12px;'+bStyle+'padding:11px 13px;'+parentOpacity+'">';
+    // 그룹 내 depth = shadow 차이 + z-index (opacity 제거 → wrapper 단일 적용)
+    var parentShadow = (cc.length > 0)
+      ? bStyle.replace('box-shadow:0 3px 12px rgba(0,0,0,.09)', 'box-shadow:0 1px 4px rgba(0,0,0,.06)')
+      : bStyle;
+    h += '<div style="background:'+v.color+';border-radius:12px;'+parentShadow+'padding:11px 13px;">';
     if (p.important) h += '<div style="background:#EF4444;margin:-11px -13px 9px;padding:3px 10px;border-radius:10px 10px 0 0;font-size:10px;font-weight:600;color:#fff;">중요</div>';
     h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;">';
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
@@ -972,12 +975,11 @@ function initBoard() {
       var isLast = (ci === cc.length-1) && !isAtt;
       var childZ = ci+2; // 부모=1, 아들1=2, 아들2=3...
       // 카드 폭 고정 - margin-left 없음, margin-top:-12px만
-      var familyBorder = p.important
-        ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 3px 10px rgba(239,68,68,.15);'
-        : 'border:1.5px solid '+cv.border+';box-shadow:0 3px 10px rgba(0,0,0,.07);';
-      var childOp = (0.78 + ci*0.06).toFixed(2);
       h += '<div style="margin-top:-12px;position:relative;z-index:'+childZ+';">';
-      h += '<div style="background:'+cv.color+';border-radius:12px;padding:10px 12px;'+familyBorder+'opacity:'+childOp+';">';
+      var childShadow = p.important
+        ? 'border:2px solid #EF4444;box-shadow:0 4px 14px rgba(239,68,68,.18);'
+        : 'border:1.5px solid '+cv.border+';box-shadow:0 4px 14px rgba(0,0,0,.13);';
+      h += '<div style="background:'+cv.color+';border-radius:12px;padding:10px 12px;'+childShadow+'">';
       // 헤더: 엄마와 동일 구조 (dot + 역할 + 버튼)
       h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
@@ -1102,10 +1104,13 @@ function initBoard() {
     var bStyle = p.important
       ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 4px 16px rgba(239,68,68,.15);'
       : 'border:1.5px solid '+v.border+';box-shadow:0 3px 12px rgba(0,0,0,.09);';
-    var parentOpacity = (cc.length > 0) ? 'opacity:0.72;' : '';
+    // 그리드도 동일: inner opacity 제거
 
     var h = '<div data-pid="'+p.id+'" style="pointer-events:all;">';
-    h += '<div style="background:'+v.color+';border-radius:12px;'+bStyle+'padding:11px 13px;'+parentOpacity+'">';
+    var gridParentShadow = (cc.length > 0)
+      ? bStyle.replace('box-shadow:0 3px 12px rgba(0,0,0,.09)', 'box-shadow:0 1px 4px rgba(0,0,0,.06)')
+      : bStyle;
+    h += '<div style="background:'+v.color+';border-radius:12px;'+gridParentShadow+'padding:11px 13px;">';
     if (p.important) h += '<div style="background:#EF4444;margin:-11px -13px 9px;padding:3px 10px;border-radius:10px 10px 0 0;font-size:10px;font-weight:600;color:#fff;">중요</div>';
     h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;">';
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
@@ -1127,8 +1132,10 @@ function initBoard() {
       var isLast = (ci === cc.length-1) && !isAtt;
       var childOp = (0.78 + ci*0.06).toFixed(2);
       h += '<div style="margin-top:-12px;position:relative;z-index:'+(ci+2)+';">';
-      var gfBorder = p.important ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 3px 10px rgba(239,68,68,.15);' : 'border:1.5px solid '+cv.border+';box-shadow:0 3px 10px rgba(0,0,0,.07);';
-      h += '<div style="background:'+cv.color+';border-radius:12px;padding:10px 12px;'+gfBorder+'opacity:'+childOp+';width:100%;box-sizing:border-box;">';
+      var gfBorder = p.important
+        ? 'border:2px solid #EF4444;box-shadow:0 4px 14px rgba(239,68,68,.18);'
+        : 'border:1.5px solid '+cv.border+';box-shadow:0 4px 14px rgba(0,0,0,.13);';
+      h += '<div style="background:'+cv.color+';border-radius:12px;padding:10px 12px;'+gfBorder+'width:100%;box-sizing:border-box;">';
       h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
       h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
