@@ -931,7 +931,7 @@ function initBoard() {
     if (myRole) h += '<button data-write style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">붙이기</button>';
     h += '<button data-sort="importance" style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:'+(sortMode==='importance'?'#1a1a1a':'#fff')+';color:'+(sortMode==='importance'?'#fff':'#888')+';cursor:pointer;">중요순</button>';
     h += '<button data-sort="time" style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:'+(sortMode==='time'?'#1a1a1a':'#fff')+';color:'+(sortMode==='time'?'#fff':'#888')+';cursor:pointer;">시간순</button>';
-    h += '<button data-mydesk style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;cursor:pointer;font-weight:500;">📌 내책상</button>';
+    h += '<button data-mydesk style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:'+(sortMode==='mydesk'?'#1a1a1a':'#fff')+';color:'+(sortMode==='mydesk'?'#fff':'#1a1a1a')+';cursor:pointer;font-weight:500;">📌 내책상</button>';
     h += '<button data-view="archive" style="padding:6px 11px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:#fff;color:#888;cursor:pointer;margin-left:auto;">완료함'+(cnt?' <span style="background:#888;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;">'+cnt+'</span>':'')+'</button>';
     h += '</div>';
     return h;
@@ -946,7 +946,8 @@ function initBoard() {
       : 'border:1.5px solid '+v.border+';box-shadow:0 3px 12px rgba(0,0,0,.09);';
 
     var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:'+CW+'px;z-index:'+pos.z+';box-sizing:border-box;pointer-events:all;">';
-    h += '<div style="background:'+v.color+';border-radius:12px;'+bStyle+'padding:11px 13px;">';
+    var parentOpacity = (cc.length > 0) ? 'opacity:0.85;' : '';
+    h += '<div style="background:'+v.color+';border-radius:12px;'+bStyle+'padding:11px 13px;'+parentOpacity+'">';
     if (p.important) h += '<div style="background:#EF4444;margin:-11px -13px 9px;padding:3px 10px;border-radius:10px 10px 0 0;font-size:10px;font-weight:600;color:#fff;">중요</div>';
     h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;">';
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
@@ -970,12 +971,12 @@ function initBoard() {
       var childZ = ci+2; // 부모=1, 아들1=2, 아들2=3...
       // 카드 폭 고정 - margin-left 없음, margin-top:-12px만
       h += '<div style="margin-top:-12px;position:relative;z-index:'+childZ+';">';
-      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);">';
+      var childOp = (0.90 + ci*0.04).toFixed(2);
+      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);opacity:'+childOp+';">';
+      // 헤더: 엄마와 동일 구조 (dot + 역할 + 버튼)
       h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
       h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
-      h += '<span style="font-size:10px;color:#bbb;white-space:nowrap;margin-left:4px;">'+fmt(c.createdAt)+'</span>';
-      // 마지막 아들에만 3버튼 (버튼 이동 로직)
       if (isLast && myRole) {
         h += '<div style="display:flex;gap:3px;flex-shrink:0;">';
         h += btnRed(c.id, c.important);
@@ -984,7 +985,8 @@ function initBoard() {
         h += '</div>';
       }
       h += '</div>';
-      h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;white-space:pre-wrap;word-break:break-all;">'+esc(c.content)+'</div>';
+      h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;white-space:pre-wrap;word-break:break-all;margin-bottom:7px;">'+esc(c.content)+'</div>';
+      h += '<div style="font-size:10px;color:#bbb;">'+fmt(c.createdAt)+'</div>';
       h += '</div></div>';
     });
 
@@ -993,7 +995,7 @@ function initBoard() {
       var attZ = cc.length+2;
       h += '<div style="margin-top:-12px;position:relative;z-index:'+attZ+';">';
       h += '<div style="background:'+cv2.color+';border:1.5px dashed '+cv2.border+';border-radius:12px;padding:10px 12px;">';
-      h += '<textarea id="attach-ta-'+p.id+'" placeholder="덧붙일 내용..." style="width:100%;min-height:60px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:none;color:#1a1a1a;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>';
+      h += '<textarea id="attach-ta-'+p.id+'" placeholder="덧붙일 내용..." style="width:100%;min-height:60px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:vertical;color:#1a1a1a;""></textarea>';
       h += '<div style="display:flex;gap:6px;margin-top:6px;">';
       h += '<button data-attach-confirm="'+p.id+'" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 붙이기</button>';
       h += '<button data-attach-cancel="'+p.id+'" style="padding:5px 10px;border-radius:6px;font-size:11px;background:none;border:0.5px solid #ddd;color:#888;cursor:pointer;">✕</button>';
@@ -1012,7 +1014,7 @@ function initBoard() {
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+(v.dot||'#aaa')+';flex-shrink:0;"></div>';
     h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(v.l||'')+'</span>';
     h += '</div>';
-    h += '<textarea id="draft-ta" placeholder="내용 입력..." autofocus style="width:100%;min-height:80px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:none;color:#1a1a1a;padding:0;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>';
+    h += '<textarea id="draft-ta" placeholder="내용 입력..." autofocus style="width:100%;min-height:80px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:vertical;color:#1a1a1a;padding:0;""></textarea>';
     h += '<div style="border-top:0.5px solid '+(v.border||'#ddd')+';margin-top:8px;padding-top:8px;">';
     h += '<div style="display:flex;gap:6px;">';
     h += '<button id="draft-confirm" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 붙이기</button>';
@@ -1023,6 +1025,20 @@ function initBoard() {
 
   function renderBoard() {
     var active = sortedActive();
+
+    // ── 흐름 레이아웃 (중요순 / 시간순) ──
+    if (sortMode !== 'mydesk') {
+      var h = '<div id="board-flow" style="display:flex;flex-direction:column;gap:16px;">';
+      active.forEach(function(p) {
+        h += renderCardFlow(p);
+      });
+      if (draftId && myRole) h += renderDraftCardFlow();
+      if (!active.length && !draftId) h += '<div style="text-align:center;padding:60px 20px;color:#bbb;font-size:13px;">포스트잇이 없습니다.<br>붙이기 버튼으로 추가하세요.</div>';
+      h += '</div>';
+      return h;
+    }
+
+    // ── 캔버스 레이아웃 (내책상) ──
     var desk = myRole ? loadDesk(myRole) : {};
     active.forEach(function(p) {
       if (!desk[p.id]) {
@@ -1050,6 +1066,88 @@ function initBoard() {
     }
     if (!active.length&&!draftId) h+='<div style="text-align:center;padding:60px 20px;color:#bbb;font-size:13px;">포스트잇이 없습니다.<br>붙이기 버튼으로 추가하세요.</div>';
     h+='</div>';
+    return h;
+  }
+
+  // ── 흐름 레이아웃용 카드 (renderCard와 동일하되 position 없음) ──
+  function renderCardFlow(p) {
+    var v = ROLE_DEF[p.role] || { l:p.role, color:'#f5f5f5', border:'#ddd', dot:'#aaa' };
+    var cc = childrenOf(p.id);
+    var isAtt = (attachParentId === p.id);
+    var bStyle = p.important
+      ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 4px 16px rgba(239,68,68,.15);'
+      : 'border:1.5px solid '+v.border+';box-shadow:0 3px 12px rgba(0,0,0,.09);';
+    var parentOpacity = (cc.length > 0) ? 'opacity:0.85;' : '';
+
+    var h = '<div data-pid="'+p.id+'" style="pointer-events:all;">';
+    h += '<div style="background:'+v.color+';border-radius:12px;'+bStyle+'padding:11px 13px;'+parentOpacity+'">';
+    if (p.important) h += '<div style="background:#EF4444;margin:-11px -13px 9px;padding:3px 10px;border-radius:10px 10px 0 0;font-size:10px;font-weight:600;color:#fff;">중요</div>';
+    h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;">';
+    h += '<div style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
+    h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(v.l)+'</span>';
+    if (!cc.length && !isAtt) {
+      h += '<div style="display:flex;gap:3px;flex-shrink:0;">';
+      h += btnRed(p.id, p.important);
+      h += btnGreen(p.id);
+      h += btnBlue(p.id, '처리완료');
+      h += '</div>';
+    }
+    h += '</div>';
+    h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;min-height:32px;white-space:pre-wrap;word-break:break-all;margin-bottom:8px;">'+esc(p.content)+'</div>';
+    h += '<div style="font-size:10px;color:#bbb;">'+fmt(p.createdAt)+'</div>';
+    h += '</div>';
+
+    cc.forEach(function(c, ci) {
+      var cv = ROLE_DEF[c.role] || { l:c.role, color:'#f5f5f5', border:'#ddd', dot:'#aaa' };
+      var isLast = (ci === cc.length-1) && !isAtt;
+      var childOp = (0.90 + ci*0.04).toFixed(2);
+      h += '<div style="margin-top:-12px;position:relative;z-index:'+(ci+2)+';">';
+      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);opacity:'+childOp+';">';
+      h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
+      h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
+      h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
+      if (isLast && myRole) {
+        h += '<div style="display:flex;gap:3px;flex-shrink:0;">';
+        h += btnRed(c.id, c.important);
+        h += btnGreen(p.id);
+        h += btnBlue(p.id, '전체 처리완료');
+        h += '</div>';
+      }
+      h += '</div>';
+      h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;white-space:pre-wrap;word-break:break-all;margin-bottom:7px;">'+esc(c.content)+'</div>';
+      h += '<div style="font-size:10px;color:#bbb;">'+fmt(c.createdAt)+'</div>';
+      h += '</div></div>';
+    });
+
+    if (isAtt) {
+      var cv2 = ROLE_DEF[myRole] || { color:'#f5f5f5', border:'#ddd' };
+      var attZ = cc.length+2;
+      h += '<div style="margin-top:-12px;position:relative;z-index:'+attZ+';">';
+      h += '<div style="background:'+cv2.color+';border:1.5px dashed '+cv2.border+';border-radius:12px;padding:10px 12px;">';
+      h += '<textarea id="attach-ta-'+p.id+'" placeholder="덧붙일 내용..." style="width:100%;min-height:60px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:vertical;color:#1a1a1a;""></textarea>';
+      h += '<div style="display:flex;gap:6px;margin-top:6px;">';
+      h += '<button data-attach-confirm="'+p.id+'" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 붙이기</button>';
+      h += '<button data-attach-cancel="'+p.id+'" style="padding:5px 10px;border-radius:6px;font-size:11px;background:none;border:0.5px solid #ddd;color:#888;cursor:pointer;">✕</button>';
+      h += '</div></div></div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  // ── 흐름 레이아웃용 draft 카드 ──
+  function renderDraftCardFlow() {
+    var v = myRole?(ROLE_DEF[myRole]||{}):{color:'#f5f5f5',border:'#ddd',dot:'#aaa',l:'작성'};
+    var h = '<div style="pointer-events:all;">';
+    h += '<div style="background:'+(v.color||'#f5f5f5')+';border:1.5px dashed '+(v.border||'#ddd')+';border-radius:12px;box-shadow:0 4px 18px rgba(0,0,0,.12);padding:11px 13px;">';
+    h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px;">';
+    h += '<div style="width:8px;height:8px;border-radius:50%;background:'+(v.dot||'#aaa')+';flex-shrink:0;"></div>';
+    h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;">'+(v.l||'')+'</span>';
+    h += '</div>';
+    h += '<textarea id="draft-ta" placeholder="내용 입력..." autofocus style="width:100%;min-height:80px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:vertical;color:#1a1a1a;padding:0;""></textarea>';
+    h += '<div style="border-top:0.5px solid '+(v.border||'#ddd')+';margin-top:8px;padding-top:8px;display:flex;gap:6px;">';
+    h += '<button id="draft-confirm" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 붙이기</button>';
+    h += '<button id="draft-cancel" style="padding:5px 10px;border-radius:6px;font-size:11px;background:none;border:0.5px solid #ddd;color:#888;cursor:pointer;">✕</button>';
+    h += '</div></div></div>';
     return h;
   }
 
@@ -1135,7 +1233,7 @@ function initBoard() {
     root.querySelectorAll('[data-view]').forEach(function(btn){ btn.addEventListener('click',function(){view=btn.dataset.view;render();}); });
     root.querySelectorAll('[data-sort]').forEach(function(btn){ btn.addEventListener('click',function(){sortMode=btn.dataset.sort;render();}); });
     var dk=root.querySelector('[data-mydesk]');
-    if(dk) dk.addEventListener('click',function(){render();});
+    if(dk) dk.addEventListener('click',function(){sortMode='mydesk';render();});
     var wb=root.querySelector('[data-write]');
     if(wb){
       wb.addEventListener('click',function(){
@@ -1235,6 +1333,7 @@ function initBoard() {
     if(!canvas) return;
     var dragging=null,sx,sy,ox,oy,moved=false;
     function onStart(e){
+      if (sortMode !== 'mydesk') return; // 정렬 모드에선 드래그 비활성
       var card=e.target.closest('.pab-card');
       if(!card||card.classList.contains('pab-draft')) return;
       if(e.target.closest('button')||e.target.closest('textarea')||e.target.closest('input')||e.target.closest('label')) return;
