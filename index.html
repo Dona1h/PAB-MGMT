@@ -873,18 +873,18 @@ function initBoard() {
   }
 
   function btnRed(id, active) {
-    var s = 'width:20px;height:20px;border-radius:50%;background:#EF4444;border:'+(active?'2px solid #fff;':'none;')+'cursor:pointer;flex-shrink:0;opacity:'+(active?'1':'0.35')+';';
+    var s = 'width:14px;height:14px;border-radius:50%;background:#EF4444;border:'+(active?'2px solid #fff;':'none;')+'cursor:pointer;flex-shrink:0;opacity:'+(active?'1':'0.35')+';padding:0;';
     return '<button data-toggle-imp="'+id+'" style="'+s+'" title="중요 표시"></button>';
   }
   function btnGreen(pid) {
-    return '<button data-attach-start="'+pid+'" style="width:20px;height:20px;border-radius:50%;background:#22C55E;border:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;" title="덧붙이기"><svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><line x1="4.5" y1="1" x2="4.5" y2="8"/><line x1="1" y1="4.5" x2="8" y2="4.5"/></svg></button>';
+    return '<button data-attach-start="'+pid+'" style="width:14px;height:14px;border-radius:50%;background:#22C55E;border:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;" title="덧붙이기"><svg width="7" height="7" viewBox="0 0 7 7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><line x1="3.5" y1="0.5" x2="3.5" y2="6.5"/><line x1="0.5" y1="3.5" x2="6.5" y2="3.5"/></svg></button>';
   }
   function btnBlue(postId, title) {
-    return '<button data-done-post="'+postId+'" style="width:20px;height:20px;border-radius:50%;background:#3B82F6;border:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;" title="'+(title||'처리완료')+'"><svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polyline points="1.5,4.5 3.5,6.5 7.5,2.5"/></svg></button>';
+    return '<button data-done-post="'+postId+'" style="width:14px;height:14px;border-radius:50%;background:#3B82F6;border:none;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;" title="'+(title||'처리완료')+'"><svg width="7" height="7" viewBox="0 0 7 7" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><polyline points="1,3.5 2.8,5.5 6,1"/></svg></button>';
   }
   function doneBadge(label, at) {
     var h = '<div style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:#EFF6FF;border:0.5px solid #BFDBFE;border-radius:6px;margin-top:6px;">';
-    h += '<div style="width:16px;height:16px;border-radius:50%;background:#3B82F6;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><polyline points="1,4 3,6 7,2"/></svg></div>';
+    h += '<div style="width:14px;height:14px;border-radius:50%;background:#3B82F6;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="7" height="7" viewBox="0 0 7 7" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><polyline points="1,3.5 2.8,5.5 6,1"/></svg></div>';
     h += '<span style="font-size:10px;color:#1D4ED8;font-weight:500;">'+esc(label)+' · '+fmt(at)+' 처리완료</span>';
     h += '</div>';
     return h;
@@ -951,11 +951,15 @@ function initBoard() {
     h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;">';
     h += '<div style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';flex-shrink:0;"></div>';
     h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(v.l)+'</span>';
-    h += '<div style="display:flex;gap:4px;flex-shrink:0;">';
-    h += btnRed(p.id, p.important);
-    h += btnGreen(p.id);
-    if (!cc.length && !isAtt) h += btnBlue(p.id, '처리완료');
-    h += '</div></div>';
+    // 버튼: 자식 없을 때만 부모에 표시
+    if (!cc.length && !isAtt) {
+      h += '<div style="display:flex;gap:3px;flex-shrink:0;">';
+      h += btnRed(p.id, p.important);
+      h += btnGreen(p.id);
+      h += btnBlue(p.id, '처리완료');
+      h += '</div>';
+    }
+    h += '</div>';
     h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;min-height:32px;white-space:pre-wrap;word-break:break-all;margin-bottom:8px;">'+esc(p.content)+'</div>';
     h += '<div style="font-size:10px;color:#bbb;">'+fmt(p.createdAt)+'</div>';
     h += '</div>';
@@ -963,14 +967,22 @@ function initBoard() {
     cc.forEach(function(c, ci) {
       var cv = ROLE_DEF[c.role] || { l:c.role, color:'#f5f5f5', border:'#ddd', dot:'#aaa' };
       var isLast = (ci === cc.length-1) && !isAtt;
-      var indent = (ci+1)*20;
-      h += '<div style="margin-left:'+indent+'px;margin-top:-12px;">';
+      var childZ = ci+2; // 부모=1, 아들1=2, 아들2=3...
+      // 카드 폭 고정 - margin-left 없음, margin-top:-12px만
+      h += '<div style="margin-top:-12px;position:relative;z-index:'+childZ+';">';
       h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);">';
       h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
       h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
       h += '<span style="font-size:10px;color:#bbb;white-space:nowrap;margin-left:4px;">'+fmt(c.createdAt)+'</span>';
-      if (isLast && myRole) h += btnBlue(p.id, '전체 처리완료');
+      // 마지막 아들에만 3버튼 (버튼 이동 로직)
+      if (isLast && myRole) {
+        h += '<div style="display:flex;gap:3px;flex-shrink:0;">';
+        h += btnRed(c.id, c.important);
+        h += btnGreen(p.id);
+        h += btnBlue(p.id, '전체 처리완료');
+        h += '</div>';
+      }
       h += '</div>';
       h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;white-space:pre-wrap;word-break:break-all;">'+esc(c.content)+'</div>';
       h += '</div></div>';
@@ -978,8 +990,8 @@ function initBoard() {
 
     if (isAtt) {
       var cv2 = ROLE_DEF[myRole] || { color:'#f5f5f5', border:'#ddd' };
-      var ai = (cc.length+1)*20;
-      h += '<div style="margin-left:'+ai+'px;margin-top:-12px;">';
+      var attZ = cc.length+2;
+      h += '<div style="margin-top:-12px;position:relative;z-index:'+attZ+';">';
       h += '<div style="background:'+cv2.color+';border:1.5px dashed '+cv2.border+';border-radius:12px;padding:10px 12px;">';
       h += '<textarea id="attach-ta-'+p.id+'" placeholder="덧붙일 내용..." style="width:100%;min-height:60px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:none;color:#1a1a1a;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>';
       h += '<div style="display:flex;gap:6px;margin-top:6px;">';
@@ -1002,9 +1014,8 @@ function initBoard() {
     h += '</div>';
     h += '<textarea id="draft-ta" placeholder="내용 입력..." autofocus style="width:100%;min-height:80px;background:transparent;border:none;outline:none;font-size:12px;font-family:inherit;line-height:1.6;resize:none;color:#1a1a1a;padding:0;" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>';
     h += '<div style="border-top:0.5px solid '+(v.border||'#ddd')+';margin-top:8px;padding-top:8px;">';
-    h += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px;font-size:11px;color:#B91C1C;"><input type="checkbox" id="draft-imp" style="cursor:pointer;"> 🔴 중요 항목</label>';
     h += '<div style="display:flex;gap:6px;">';
-    h += '<button id="draft-confirm" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 등록</button>';
+    h += '<button id="draft-confirm" style="flex:1;padding:5px;border-radius:6px;font-size:11px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">✓ 붙이기</button>';
     h += '<button id="draft-cancel" style="padding:5px 10px;border-radius:6px;font-size:11px;background:none;border:0.5px solid #ddd;color:#888;cursor:pointer;">✕</button>';
     h += '</div></div></div></div>';
     return h;
@@ -1068,8 +1079,8 @@ function initBoard() {
         kids.forEach(function(c,ci){
           var cv=ROLE_DEF[c.role]||{l:c.role,color:'#f5f5f5',border:'#ddd'};
           var isLast=(ci===kids.length-1);
-          var indent=(ci+1)*20;
-          h+='<div style="margin-left:'+indent+'px;margin-top:-12px;">';
+          var kz=ci+2; // z-index: 부모=1, 아들1=2, 아들2=3
+          h+='<div style="margin-top:-12px;position:relative;z-index:'+kz+';">';
           h+='<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;opacity:'+(0.78+ci*0.06)+';box-shadow:0 3px 10px rgba(0,0,0,.07);">';
           h+='<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">';
           h+='<div style="width:7px;height:7px;border-radius:50%;background:'+cv.border+';"></div>';
@@ -1148,7 +1159,7 @@ function initBoard() {
       var ta=root.querySelector('#draft-ta');
       var content=ta?ta.value.trim():'';
       if(!content||!myRole){draftId=null;render();return;}
-      var imp=!!(root.querySelector('#draft-imp')||{}).checked;
+      var imp=false; // 중요는 등록 후 버튼으로
       var v=ROLE_DEF[myRole]||{};
       var desk=loadDesk(myRole);
       var pos=desk['__draft__']||{x:10,y:10,z:zCounter++};
