@@ -5,382 +5,468 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PAB 관리자</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-       background: #f5f6f7; color: #1a1a1a; min-height: 100vh; }
-#app { max-width: 480px; margin: 0 auto; padding: 20px 16px 60px; }
-.card  { background: #fff; border: 0.5px solid #e0e0e0; border-radius: 14px; padding: 16px; margin-bottom: 12px; }
-.input { width: 100%; padding: 10px 12px; border: 0.5px solid #ddd; border-radius: 8px;
-         font-size: 14px; font-family: inherit; outline: none; background: #fff; }
-.input:focus { border-color: #1a1a1a; }
-.btn-dark { width: 100%; padding: 12px; border-radius: 10px; background: #1a1a1a;
-            color: #fff; font-size: 14px; font-weight: 500; border: none; cursor: pointer; }
-.menu { background: #fff; border: 0.5px solid #e0e0e0; border-radius: 12px;
-        padding: 14px 16px; cursor: pointer; text-align: left; display: block; width: 100%; }
-.nav { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-.nav-back { border: none; background: none; cursor: pointer; font-size: 20px; color: #aaa; padding: 0; }
-.nav-title { font-size: 15px; font-weight: 600; }
-.sec { font-size: 11px; color: #888; margin-bottom: 5px; }
-.err { font-size: 12px; color: #EF4444; min-height: 16px; }
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f6f7;color:#1a1a1a;min-height:100vh;}
+#app{max-width:600px;margin:0 auto;padding:20px 16px 60px;}
+.card{background:#fff;border:0.5px solid #e0e0e0;border-radius:14px;padding:16px;margin-bottom:12px;}
+.input{width:100%;padding:10px 12px;border:0.5px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;outline:none;}
+.input:focus{border-color:#1a1a1a;}
+.btn{padding:9px 16px;border-radius:9px;font-size:13px;font-weight:500;border:none;cursor:pointer;}
+.btn-dark{background:#1a1a1a;color:#fff;}
+.btn-light{background:#f0f0f0;color:#1a1a1a;}
+.btn-red{background:#FEF2F2;color:#B91C1C;border:0.5px solid #FECACA;}
+.btn-block{width:100%;padding:12px;}
+.nav{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.nav-back{border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;}
+.nav-title{font-size:15px;font-weight:600;}
+.sec{font-size:11px;color:#888;margin-bottom:5px;}
+.err{font-size:12px;color:#EF4444;min-height:16px;}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge-blue{background:#EFF6FF;color:#1D4ED8;}
+.badge-green{background:#F0FDF4;color:#15803D;}
+.badge-red{background:#FEF2F2;color:#B91C1C;}
+.badge-gray{background:#F3F4F6;color:#555;}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+.stat-card{background:#f8f9fa;border-radius:10px;padding:10px;text-align:center;}
+.stat-num{font-size:22px;font-weight:700;}
+.stat-lbl{font-size:10px;color:#888;margin-top:2px;}
+.role-section{margin-bottom:14px;}
+.role-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.role-name{font-size:13px;font-weight:600;}
+.post-item{padding:8px 10px;border-radius:8px;border:0.5px solid #eee;margin-bottom:6px;background:#fff;}
+.post-header{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.post-dot{width:7px;height:7px;border-radius:50%;}
+.post-role{font-size:10px;font-weight:500;color:#555;}
+.post-time{font-size:10px;color:#bbb;margin-left:auto;}
+.post-content{font-size:12px;color:#333;line-height:1.5;}
+.divider{border:none;border-top:0.5px solid #eee;margin:12px 0;}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script>
-var GAS_URL   = "https://script.google.com/macros/s/AKfycbzQTZ5oXtWUaOXXyS9rKeX7UMXleV1lJzDgx6FfhBqm8VH9z1wj8Z8DWDODr7yjr70/exec";
-var GAS_TOKEN = "pab2024";
-var HKEY  = "pab-admin-hash-v2";
-var MKEY  = "pab-msgs-v1";
-var NKEY  = "pab-notices-v1";
-var SKEY  = "pab-settings-v1";
-var PKEY  = "pab-posts-v1";
-var ALL   = ["morning","afternoon","evening"];
-var ROLES = { morning:{l:"오전 매니저님"}, afternoon:{l:"오후 매니저님"}, evening:{l:"저녁 매니저님"}, staff:{l:"직원"} };
-var isAuth = false, view = "auth";
-var msgs=[], notices=[], settings={pins:{}}, posts=[];
-var syncStatus = "";
+var GAS_URL='https://script.google.com/macros/s/AKfycbxj3fQldpV3lhdWzUhos8PE8FOCQoVyCBdfFnCITM6SLTJNFErBOwFW_D7DDh5-08XT/exec';
+var GAS_TOKEN='pab2024';
+var HKEY='pab-admin-hash-v2';
+var MKEY='pab-msgs-v1',NKEY='pab-notices-v1',SKEY='pab-settings-v1',PKEY='pab-posts-v1';
+var ROLE_DEF={morning:{l:'오전 매니저님',color:'#FFF0ED',dot:'#FF7452'},afternoon:{l:'오후 매니저님',color:'#FFFDE7',dot:'#F59E0B'},evening:{l:'저녁 매니저님',color:'#F0FFF4',dot:'#22C55E'},staff:{l:'직원',color:'#EFF6FF',dot:'#3B82F6'}};
+var ROLE_KEYS=['morning','afternoon','evening','staff'];
 
-// GAS
-function gasRead(action) {
-  return new Promise(function(resolve) {
-    var cb = "_pab_" + action.replace(/\W/g,"") + "_" + Date.now();
-    var timer = setTimeout(function(){ delete window[cb]; resolve(null); }, 8000);
-    window[cb] = function(data){ clearTimeout(timer); delete window[cb]; resolve(data&&data.ok?data.data:null); };
-    var s = document.createElement("script");
-    s.src = GAS_URL+"?token="+GAS_TOKEN+"&action="+action+"&callback="+cb+"&_="+Date.now();
-    s.onerror = function(){ clearTimeout(timer); delete window[cb]; s.remove(); resolve(null); };
+var isAuth=false,view='auth';
+var msgs=[],notices=[],settings={pins:{}},posts=[];
+var syncStatus='';
+
+function gasRead(action){
+  return new Promise(function(resolve){
+    var cb='_pab_'+action.replace(/\W/g,'')+'_'+Date.now();
+    var timer=setTimeout(function(){delete window[cb];resolve(null);},8000);
+    window[cb]=function(data){clearTimeout(timer);delete window[cb];resolve(data&&data.ok?data.data:null);};
+    var s=document.createElement('script');
+    s.src=GAS_URL+'?token='+GAS_TOKEN+'&action='+action+'&callback='+cb+'&_='+Date.now();
+    s.onerror=function(){clearTimeout(timer);delete window[cb];s.remove();resolve(null);};
     document.head.appendChild(s);
   });
 }
-function gasWrite(action, data) {
-  try {
-    var p = encodeURIComponent(JSON.stringify(data));
-    if (p.length > 7000) return;
-    var s = document.createElement("script");
-    s.src = GAS_URL+"?token="+GAS_TOKEN+"&action="+action+"&payload="+p+"&_="+Date.now();
-    s.onload = s.onerror = function(){ s.remove(); };
+function gasWrite(action,data){
+  try{
+    var p=encodeURIComponent(JSON.stringify(data));
+    if(p.length>7000) return;
+    var s=document.createElement('script');
+    s.src=GAS_URL+'?token='+GAS_TOKEN+'&action='+action+'&payload='+p+'&_='+Date.now();
+    s.onload=s.onerror=function(){s.remove();};
     document.head.appendChild(s);
-  } catch(e) {}
+  }catch(e){}
 }
-function ls_get(k,def){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
-function ls_set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-function saveSettings(d){ ls_set(SKEY,d); gasWrite("saveSettings",d); }
+function ls_get(k,def){try{var v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}}
+function ls_set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function saveSettings(d){ls_set(SKEY,d);gasWrite('saveSettings',d);}
+function savePosts(d){ls_set(PKEY,d);gasWrite('savePosts',d);}
+function saveNotices(d){ls_set(NKEY,d);gasWrite('saveNotices',d);}
 
-// 비밀번호 - djb2 해시 (완전 동기, 즉시 실행)
-function djb2(str) {
-  var h = 5381;
-  for (var i=0; i<str.length; i++) h = ((h*33)^str.charCodeAt(i))>>>0;
-  return h.toString(16);
-}
-function hashPw(pw) {
-  var salt = djb2(Date.now()+"").slice(0,8);
-  return salt + ":" + djb2(salt+"|"+pw+"|pab2025");
-}
-function verifyPw(pw, stored) {
-  if (!stored || stored.indexOf(":")<0) return false;
-  var i = stored.indexOf(":");
-  var salt = stored.slice(0,i);
-  return stored.slice(i+1) === djb2(salt+"|"+pw+"|pab2025");
-}
+// 비밀번호 djb2
+function djb2(str){var h=5381;for(var i=0;i<str.length;i++) h=((h*33)^str.charCodeAt(i))>>>0;return h.toString(16);}
+function hashPw(pw){var salt=djb2(Date.now()+'').slice(0,8);return salt+':'+djb2(salt+'|'+pw+'|pab2025');}
+function verifyPw(pw,stored){if(!stored||stored.indexOf(':')<0) return false;var i=stored.indexOf(':');var salt=stored.slice(0,i);return stored.slice(i+1)===djb2(salt+'|'+pw+'|pab2025');}
 
-// PIN 해시 (SHA-256 async - crypto.subtle)
-function hashPin(pin) {
-  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin+"pab_pin_salt_2025"))
-    .then(function(buf){ return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,"0"); }).join(""); });
-}
+// PIN 해시
+function hashPin(pin){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(pin+'pab_pin_salt_2025')).then(function(buf){return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');});}
 
-// 포맷
-function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function fmt(iso){ var d=new Date(iso),diff=Date.now()-d; if(diff<3600000) return Math.floor(diff/60000)+"분 전"; if(diff<86400000) return Math.floor(diff/3600000)+"시간 전"; return d.toLocaleDateString("ko-KR",{month:"short",day:"numeric"}); }
-function toast(msg, ok) {
-  var el=document.createElement("div");
-  el.style.cssText="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;background:"+(ok===false?"#EF4444":"#1a1a1a")+";color:#fff;pointer-events:none;";
-  el.textContent=msg; document.body.appendChild(el); setTimeout(function(){ el.remove(); },2500);
-}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmt(iso){var d=new Date(iso);var mm=String(d.getMonth()+1).padStart(2,'0');var dd=String(d.getDate()).padStart(2,'0');var hh=String(d.getHours()).padStart(2,'0');var mi=String(d.getMinutes()).padStart(2,'0');return d.getFullYear()+'.'+mm+'.'+dd+' '+hh+':'+mi;}
+function toast(msg,ok){var el=document.createElement('div');el.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;background:'+(ok===false?'#EF4444':'#1a1a1a')+';color:#fff;pointer-events:none;';el.textContent=msg;document.body.appendChild(el);setTimeout(function(){el.remove();},2500);}
 
-// ── 렌더 함수들 ──
-function renderAuth() {
-  var noHash = !localStorage.getItem(HKEY);
-  if (noHash) {
-    return "<div style='text-align:center;padding:60px 0 32px'><div style='font-size:36px;margin-bottom:14px'>🔐</div>" +
-           "<div style='font-size:18px;font-weight:600;margin-bottom:6px'>관리자 비밀번호 설정</div>" +
-           "<div style='font-size:12px;color:#888;margin-bottom:28px'>최초 1회 설정 (4자 이상)</div></div>" +
-           "<div class='card'>" +
-           "<div style='margin-bottom:10px'><div class='sec'>새 비밀번호</div><input type='password' id='pw1' class='input' placeholder='비밀번호 입력'></div>" +
-           "<div style='margin-bottom:14px'><div class='sec'>비밀번호 확인</div><input type='password' id='pw2' class='input' placeholder='재입력'></div>" +
-           "<div id='auth-err' class='err' style='margin-bottom:8px'></div>" +
-           "<button class='btn-dark' id='btn-setup'>설정 완료</button></div>";
+// ── renderAuth ──
+function renderAuth(){
+  var noHash=!localStorage.getItem(HKEY);
+  if(noHash){
+    return "<div style='text-align:center;padding:60px 0 32px'><div style='font-size:36px;margin-bottom:14px'>🔐</div><div style='font-size:18px;font-weight:600;margin-bottom:6px'>관리자 비밀번호 설정</div><div style='font-size:12px;color:#888;margin-bottom:28px'>최초 1회 설정 (4자 이상)</div></div>"+
+           "<div class='card'><div style='margin-bottom:10px'><div class='sec'>새 비밀번호</div><input type='password' id='pw1' class='input' placeholder='비밀번호 입력'></div>"+
+           "<div style='margin-bottom:14px'><div class='sec'>비밀번호 확인</div><input type='password' id='pw2' class='input' placeholder='재입력'></div>"+
+           "<div id='auth-err' class='err' style='margin-bottom:8px'></div>"+
+           "<button class='btn btn-dark btn-block' id='btn-setup'>설정 완료</button></div>";
   }
-  return "<div style='text-align:center;padding:60px 0 32px'><div style='font-size:36px;margin-bottom:14px'>🔐</div>" +
-         "<div style='font-size:18px;font-weight:600;margin-bottom:4px'>PAB 관리자</div>" +
-         "<div style='font-size:12px;color:#888;margin-bottom:28px'>비밀번호를 입력해 주세요</div></div>" +
-         "<div class='card'>" +
-         "<div style='margin-bottom:14px'><input type='password' id='pw' class='input' placeholder='비밀번호'></div>" +
-         "<div id='auth-err' class='err' style='margin-bottom:8px'></div>" +
-         "<button class='btn-dark' id='btn-login' style='margin-bottom:10px'>로그인</button>" +
-         "<div style='text-align:center'><button id='btn-reset' style='font-size:11px;color:#bbb;background:none;border:none;cursor:pointer;text-decoration:underline'>비밀번호 초기화</button></div>" +
+  return "<div style='text-align:center;padding:60px 0 32px'><div style='font-size:36px;margin-bottom:14px'>🔐</div><div style='font-size:18px;font-weight:600;margin-bottom:4px'>PAB 관리자</div><div style='font-size:12px;color:#888;margin-bottom:28px'>비밀번호를 입력해 주세요</div></div>"+
+         "<div class='card'><div style='margin-bottom:14px'><input type='password' id='pw' class='input' placeholder='비밀번호'></div>"+
+         "<div id='auth-err' class='err' style='margin-bottom:8px'></div>"+
+         "<button class='btn btn-dark btn-block' id='btn-login' style='margin-bottom:10px'>로그인</button>"+
+         "<div style='text-align:center'><button id='btn-reset' style='font-size:11px;color:#bbb;background:none;border:none;cursor:pointer;text-decoration:underline'>비밀번호 초기화</button></div></div>";
+}
+
+// ── renderMain — 대시보드 ──
+function renderMain(){
+  var activePosts=posts.filter(function(p){return !p.done&&!p.parentId;});
+  var donePosts=posts.filter(function(p){return !!p.done&&!p.parentId;});
+  var importantPosts=activePosts.filter(function(p){return p.important;});
+  var actNotices=notices.filter(function(n){return n.active!==false;});
+  var totalMsgs=msgs.length;
+
+  var h="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'>"+
+         "<div style='font-size:18px;font-weight:700'>PAB 관리자</div>"+
+         "<button id='btn-lock' style='border:none;background:none;cursor:pointer;font-size:13px;color:#888'>🔒 잠금</button></div>"+
+         "<div style='font-size:11px;color:#bbb;margin-bottom:18px'>"+(syncStatus||'로컬 데이터')+"</div>";
+
+  // 총합 카드
+  h+="<div class='card' style='margin-bottom:12px'>"+
+     "<div style='font-size:12px;font-weight:600;margin-bottom:10px'>📊 전체 현황</div>"+
+     "<div class='stat-grid'>"+
+     "<div class='stat-card'><div class='stat-num'>"+activePosts.length+"</div><div class='stat-lbl'>활성 포스트잇</div></div>"+
+     "<div class='stat-card'><div class='stat-num' style='color:#B91C1C'>"+importantPosts.length+"</div><div class='stat-lbl'>중요</div></div>"+
+     "<div class='stat-card'><div class='stat-num' style='color:#15803D'>"+donePosts.length+"</div><div class='stat-lbl'>완료</div></div>"+
+     "</div>"+
+     "<div class='stat-grid'>"+
+     "<div class='stat-card'><div class='stat-num' style='color:#1D4ED8'>"+actNotices.length+"</div><div class='stat-lbl'>공고</div></div>"+
+     "<div class='stat-card'><div class='stat-num'>"+totalMsgs+"</div><div class='stat-lbl'>메시지</div></div>"+
+     "<div class='stat-card'><div class='stat-num' style='color:#6B7280'>"+posts.filter(function(p){return p.parentId;}).length+"</div><div class='stat-lbl'>덧붙이기</div></div>"+
+     "</div></div>";
+
+  // 역할별 포스트잇 현황
+  h+="<div class='card' style='margin-bottom:12px'>"+
+     "<div style='font-size:12px;font-weight:600;margin-bottom:10px'>📌 역할별 포스트잇</div>";
+  ROLE_KEYS.forEach(function(k){
+    var v=ROLE_DEF[k];
+    var ra=activePosts.filter(function(p){return p.role===k;});
+    var rd=donePosts.filter(function(p){return p.role===k;});
+    var ri=ra.filter(function(p){return p.important;});
+    h+="<div style='display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid #f0f0f0'>"+
+       "<div style='width:8px;height:8px;border-radius:50%;background:"+v.dot+";flex-shrink:0'></div>"+
+       "<span style='font-size:12px;font-weight:500;flex:1'>"+v.l+"</span>"+
+       "<span class='badge badge-gray'>활성 "+ra.length+"</span>"+
+       (ri.length?"<span class='badge badge-red'>중요 "+ri.length+"</span>":"")+
+       "<span class='badge badge-green'>완료 "+rd.length+"</span>"+
+       "</div>";
+  });
+  h+="</div>";
+
+  // 최근 메시지 (매니저 간)
+  var recentMsgs=msgs.slice(-5).reverse();
+  if(recentMsgs.length){
+    h+="<div class='card' style='margin-bottom:12px'>"+
+       "<div style='font-size:12px;font-weight:600;margin-bottom:10px'>💬 최근 메시지</div>";
+    recentMsgs.forEach(function(m){
+      var fv=ROLE_DEF[m.from]||{l:m.from,dot:'#aaa'};
+      var tv=ROLE_DEF[m.to]||{l:m.to,dot:'#aaa'};
+      h+="<div style='padding:7px 0;border-bottom:0.5px solid #f0f0f0'>"+
+         "<div style='display:flex;align-items:center;gap:4px;margin-bottom:3px'>"+
+         "<span style='font-size:10px;font-weight:500;color:"+fv.dot+"'>"+esc(fv.l)+"</span>"+
+         "<span style='font-size:10px;color:#bbb'>→</span>"+
+         "<span style='font-size:10px;font-weight:500;color:"+tv.dot+"'>"+esc(tv.l)+"</span>"+
+         "<span style='font-size:10px;color:#bbb;margin-left:auto'>"+fmt(m.createdAt||m.ts||new Date().toISOString())+"</span></div>"+
+         "<div style='font-size:11px;color:#444;line-height:1.5'>"+esc((m.content||'').slice(0,60))+(m.content&&m.content.length>60?'…':'')+"</div>"+
          "</div>";
+    });
+    h+="</div>";
+  }
+
+  // 메뉴
+  h+="<div class='card' style='margin-bottom:0'>"+
+     "<div style='font-size:12px;font-weight:600;margin-bottom:10px'>메뉴</div>"+
+     "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px'>"+
+     "<button class='btn btn-light' data-view='notice' style='padding:12px;border-radius:10px;font-size:12px;font-weight:500'>📢 공지 관리</button>"+
+     "<button class='btn btn-light' data-view='pins' style='padding:12px;border-radius:10px;font-size:12px;font-weight:500'>🔑 PIN 관리</button>"+
+     "<button class='btn btn-light' data-view='poststats' style='padding:12px;border-radius:10px;font-size:12px;font-weight:500'>📌 포스트잇 관리</button>"+
+     "<button class='btn btn-light' data-view='change-pw' style='padding:12px;border-radius:10px;font-size:12px;font-weight:500'>🔒 비밀번호</button>"+
+     "</div></div>";
+  return h;
 }
 
-function renderMain() {
-  var actN=notices.filter(function(n){return n.active!==false;}).length;
-  var tp=posts.filter(function(p){return !p.done&&!p.parentId;}).length;
-  var dp=posts.filter(function(p){return p.done&&!p.parentId;}).length;
-  return "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'>" +
-         "<div style='font-size:18px;font-weight:700'>PAB 관리자</div>" +
-         "<button id='btn-lock' style='border:none;background:none;cursor:pointer;font-size:13px;color:#888'>🔒 잠금</button></div>" +
-         "<div style='font-size:11px;color:#bbb;margin-bottom:18px'>"+(syncStatus||"로컬 데이터")+"</div>" +
-         "<button class='menu' data-view='notice' style='margin-bottom:10px'><div style='font-size:13px;font-weight:500'>📢 공지 관리</div><div style='font-size:11px;color:#888;margin-top:3px'>활성 공고 "+actN+"건</div></button>" +
-         "<button class='menu' data-view='pins' style='margin-bottom:10px'><div style='font-size:13px;font-weight:500'>🔑 PIN 관리</div><div style='font-size:11px;color:#888;margin-top:3px'>매니저·직원·게스트 PIN 설정</div></button>" +
-         "<button class='menu' data-view='poststats' style='margin-bottom:10px'><div style='font-size:13px;font-weight:500'>📌 포스트잇 현황</div><div style='font-size:11px;color:#888;margin-top:3px'>활성 "+tp+"건 · 완료 "+dp+"건</div></button>" +
-         "<button class='menu' data-view='change-pw'><div style='font-size:13px;font-weight:500'>🔒 비밀번호 변경</div></button>";
+// ── renderPostStats — 포스트잇 관리 (삭제 포함) ──
+function renderPostStats(){
+  var active=posts.filter(function(p){return !p.done&&!p.parentId;});
+  var done=posts.filter(function(p){return !!p.done&&!p.parentId;});
+  var h="<div class='nav'><button class='nav-back' data-view='main'>←</button><div class='nav-title'>포스트잇 관리</div></div>";
+
+  // 활성 포스트잇
+  h+="<div style='font-size:12px;font-weight:600;margin-bottom:8px'>활성 ("+active.length+"건)</div>";
+  if(active.length){
+    active.forEach(function(p){
+      var v=ROLE_DEF[p.role]||{l:p.role,color:'#f5f5f5',dot:'#aaa'};
+      var kids=posts.filter(function(c){return c.parentId===p.id;});
+      h+="<div class='card' style='margin-bottom:8px;background:"+v.color+";border:none'>"+
+         "<div style='display:flex;align-items:center;gap:6px'>"+
+         "<div style='width:7px;height:7px;border-radius:50%;background:"+v.dot+"'></div>"+
+         "<span style='font-size:11px;font-weight:500;flex:1'>"+esc(v.l)+"</span>"+
+         (p.important?"<span class='badge badge-red'>중요</span>":"")+
+         (kids.length?"<span class='badge badge-gray'>덧붙임 "+kids.length+"</span>":"")+
+         "<span style='font-size:10px;color:#bbb'>"+fmt(p.createdAt)+"</span>"+
+         "<button data-del-post='"+p.id+"' class='btn btn-red' style='padding:4px 9px;font-size:11px;flex-shrink:0'>삭제</button>"+
+         "</div>"+
+         "<div style='font-size:12px;color:#333;margin-top:5px;line-height:1.5'>"+esc(p.content.slice(0,80))+(p.content.length>80?'…':'')+"</div>"+
+         "</div>";
+    });
+  } else {
+    h+="<div style='text-align:center;padding:20px;color:#bbb;font-size:13px'>없음</div>";
+  }
+
+  h+="<hr class='divider'>";
+  h+="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px'>"+
+     "<span style='font-size:12px;font-weight:600'>완료함 ("+done.length+"건)</span>"+
+     (done.length?"<button id='btn-clear-all-done' class='btn btn-red' style='font-size:11px;padding:5px 10px'>전체 삭제</button>":"")+"</div>";
+  if(done.length){
+    done.forEach(function(p){
+      var v=ROLE_DEF[p.role]||{l:p.role,color:'#f5f5f5',dot:'#aaa'};
+      var dv=ROLE_DEF[p.done&&p.done.byRole]||{l:p.done&&(p.done.byLabel||p.done.by)||''};
+      var kids=posts.filter(function(c){return c.parentId===p.id;});
+      h+="<div class='card' style='margin-bottom:8px;opacity:.8'>"+
+         "<div style='display:flex;align-items:center;gap:6px'>"+
+         "<div style='width:7px;height:7px;border-radius:50%;background:"+v.dot+"'></div>"+
+         "<span style='font-size:11px;font-weight:500;flex:1'>"+esc(v.l)+"</span>"+
+         (kids.length?"<span class='badge badge-gray'>덧붙임 "+kids.length+"</span>":"")+
+         "<button data-del-done='"+p.id+"' class='btn btn-red' style='padding:4px 9px;font-size:11px;flex-shrink:0'>삭제</button>"+
+         "</div>"+
+         "<div style='font-size:12px;color:#555;margin-top:5px;line-height:1.5'>"+esc(p.content.slice(0,80))+(p.content.length>80?'…':'')+"</div>"+
+         "<div style='display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#EFF6FF;border-radius:5px;margin-top:5px;font-size:10px;color:#1D4ED8;font-weight:500'>"+
+         "✓ "+esc(dv.l)+" · "+fmt(p.done.at)+" 처리완료</div>"+
+         "</div>";
+    });
+  } else {
+    h+="<div style='text-align:center;padding:20px;color:#bbb;font-size:13px'>없음</div>";
+  }
+  return h;
 }
 
-function renderPins() {
-  var RLABELS={morning:"오전 매니저님",afternoon:"오후 매니저님",evening:"저녁 매니저님",staff:"직원",guest:"게스트"};
+// ── renderPins ──
+function renderPins(){
+  var RLABELS={morning:'오전 매니저님',afternoon:'오후 매니저님',evening:'저녁 매니저님',staff:'직원',guest:'게스트'};
   var h="<div class='nav'><button class='nav-back' data-view='main'>←</button><div class='nav-title'>PIN 관리</div></div>";
   h+="<div class='card'><div class='sec' style='margin-bottom:10px'>4자리 숫자 PIN 설정</div>";
   h+="<div id='pin-msg' style='font-size:12px;min-height:16px;margin-bottom:10px'></div>";
-  ["morning","afternoon","evening","staff","guest"].forEach(function(k){
-    var hasPIN = k==="guest" ? !!settings.guestPin : !!(settings.pins&&settings.pins[k]);
-    h+="<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px'>";
-    h+="<div style='width:76px;font-size:12px;font-weight:500;flex-shrink:0'>"+esc(RLABELS[k])+"</div>";
-    h+="<input type='password' id='pin-"+k+"' class='input' maxlength='4' placeholder='●●●●' style='flex:1'>";
-    h+="<button data-set-pin='"+k+"' style='padding:8px 12px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;flex-shrink:0'>설정</button>";
-    if(hasPIN) h+="<button data-clear-pin='"+k+"' style='padding:8px 10px;border-radius:8px;font-size:12px;background:#FEF2F2;color:#B91C1C;border:0.5px solid #FECACA;cursor:pointer;flex-shrink:0'>초기화</button>";
-    h+="</div>";
+  ['morning','afternoon','evening','staff','guest'].forEach(function(k){
+    var hasPIN=k==='guest'?!!settings.guestPin:!!(settings.pins&&settings.pins[k]);
+    h+="<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px'>"+
+       "<div style='width:80px;font-size:12px;font-weight:500;flex-shrink:0'>"+esc(RLABELS[k])+"</div>"+
+       "<input type='password' id='pin-"+k+"' class='input' maxlength='4' placeholder='●●●●' style='flex:1'>"+
+       "<button data-set-pin='"+k+"' class='btn btn-dark' style='padding:8px 12px;font-size:12px;flex-shrink:0'>설정</button>"+
+       (hasPIN?"<button data-clear-pin='"+k+"' class='btn btn-red' style='padding:8px 10px;font-size:12px;flex-shrink:0'>초기화</button>":"")+
+       "</div>";
   });
-  h+="</div>"; return h;
+  h+="</div>";
+  return h;
 }
 
-function renderNotice() {
-  var active=notices.filter(function(n){return n.active!==false;}).sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});
+// ── renderNotice ──
+function renderNotice(){
+  var active=notices.filter(function(n){return n.active!==false;})
+                    .sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});
   var h="<div class='nav'><button class='nav-back' data-view='main'>←</button><div class='nav-title'>공지 관리</div></div>";
-  h+="<div class='card'>";
-  h+="<div style='margin-bottom:8px'><div class='sec'>제목(선택)</div><input id='nt-title' class='input' placeholder='공지 제목'></div>";
-  h+="<div style='margin-bottom:8px'><div class='sec'>유형</div><select id='nt-type' class='input'><option value='notice'>일반 공지</option><option value='policy'>정책 공지</option></select></div>";
-  h+="<div style='margin-bottom:12px'><div class='sec'>내용</div><textarea id='nt-content' class='input' rows='4' placeholder='공지 내용...' style='resize:vertical'></textarea></div>";
-  h+="<button class='btn-dark' id='btn-post-notice'>게시하기</button></div>";
+  h+="<div class='card'>"+
+     "<div style='margin-bottom:8px'><div class='sec'>제목(선택)</div><input id='nt-title' class='input' placeholder='공지 제목'></div>"+
+     "<div style='margin-bottom:8px'><div class='sec'>유형</div><select id='nt-type' class='input'><option value='notice'>일반 공지</option><option value='policy'>정책 공지</option></select></div>"+
+     "<div style='margin-bottom:12px'><div class='sec'>내용</div><textarea id='nt-content' class='input' rows='4' placeholder='공지 내용...' style='resize:vertical'></textarea></div>"+
+     "<button class='btn btn-dark btn-block' id='btn-post-notice'>게시하기</button></div>";
   if(active.length){
     h+="<div style='font-size:12px;font-weight:600;margin:14px 0 8px'>현재 공고 ("+active.length+"건)</div>";
     active.forEach(function(n){
-      var tc=n.type==="policy"?"#7E22CE":"#1D4ED8";
-      h+="<div class='card' style='margin-bottom:8px'><div style='display:flex;align-items:flex-start;gap:8px'><div style='flex:1'>";
-      if(n.title) h+="<div style='font-size:12px;font-weight:600;margin-bottom:3px'>"+esc(n.title)+"</div>";
-      h+="<div style='font-size:11px;color:#555;line-height:1.55;white-space:pre-wrap'>"+esc(n.content)+"</div>";
-      h+="<div style='font-size:10px;color:#bbb;margin-top:4px'>"+fmt(n.createdAt)+" · <span style='color:"+tc+"'>"+(n.type==="policy"?"정책":"일반")+"</span></div></div>";
-      h+="<button data-archive='"+n.id+"' style='padding:5px 10px;border-radius:6px;font-size:11px;background:#FEF2F2;color:#B91C1C;border:0.5px solid #FECACA;cursor:pointer;flex-shrink:0'>내리기</button>";
-      h+="</div></div>";
+      var tc=n.type==='policy'?'#7E22CE':'#1D4ED8';
+      h+="<div class='card' style='margin-bottom:8px'><div style='display:flex;align-items:flex-start;gap:8px'><div style='flex:1'>"+
+         (n.title?"<div style='font-size:12px;font-weight:600;margin-bottom:3px'>"+esc(n.title)+"</div>":"")+
+         "<div style='font-size:11px;color:#555;line-height:1.55;white-space:pre-wrap'>"+esc(n.content)+"</div>"+
+         "<div style='font-size:10px;color:#bbb;margin-top:4px'>"+fmt(n.createdAt)+" · <span style='color:"+tc+"'>"+(n.type==='policy'?'정책':'일반')+"</span></div></div>"+
+         "<button data-archive='"+n.id+"' class='btn btn-red' style='padding:5px 10px;font-size:11px;flex-shrink:0'>내리기</button>"+
+         "</div></div>";
     });
   }
   return h;
 }
 
-function renderPostStats() {
-  var RK=["morning","afternoon","evening","staff"];
-  var RL={morning:"오전 매니저님",afternoon:"오후 매니저님",evening:"저녁 매니저님",staff:"직원"};
-  var RC={morning:"#FFF0ED",afternoon:"#FFFDE7",evening:"#F0FFF4",staff:"#EFF6FF"};
-  var RB={morning:"#FFBCAA",afternoon:"#FFE082",evening:"#86EFAC",staff:"#BFDBFE"};
-  var total=posts.filter(function(p){return !p.done&&!p.parentId;}).length;
-  var done=posts.filter(function(p){return p.done&&!p.parentId;}).length;
-  var h="<div class='nav'><button class='nav-back' data-view='main'>←</button><div class='nav-title'>포스트잇 현황</div></div>";
-  h+="<div class='card' style='background:#f8f9fa;margin-bottom:14px'><div style='display:flex;gap:24px'>";
-  h+="<div style='text-align:center'><div style='font-size:28px;font-weight:700'>"+total+"</div><div style='font-size:11px;color:#888'>활성</div></div>";
-  h+="<div style='text-align:center'><div style='font-size:28px;font-weight:700;color:#15803D'>"+done+"</div><div style='font-size:11px;color:#888'>완료</div></div>";
-  h+="<div style='text-align:center'><div style='font-size:28px;font-weight:700;color:#888'>"+(total+done)+"</div><div style='font-size:11px;color:#888'>전체</div></div>";
-  h+="</div></div>";
-  RK.forEach(function(k){
-    var mt=posts.filter(function(p){return p.role===k&&!p.parentId;}).length;
-    var md=posts.filter(function(p){return p.role===k&&p.done&&!p.parentId;}).length;
-    if(!mt) return;
-    h+="<div class='card' style='background:"+RC[k]+";border-color:"+RB[k]+";margin-bottom:10px'>";
-    h+="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px'>";
-    h+="<div style='font-size:13px;font-weight:500'>"+RL[k]+"</div><span style='font-size:11px;color:#888'>총 "+mt+"건</span></div>";
-    h+="<div style='display:flex;gap:20px'>";
-    h+="<div><div style='font-size:22px;font-weight:700'>"+(mt-md)+"</div><div style='font-size:10px;color:#888'>활성</div></div>";
-    h+="<div><div style='font-size:22px;font-weight:700;color:#15803D'>"+md+"</div><div style='font-size:10px;color:#888'>완료</div></div>";
-    h+="</div>";
-    var recent=posts.filter(function(p){return p.role===k&&!p.done&&!p.parentId;}).slice(0,3);
-    if(recent.length){
-      h+="<div style='margin-top:10px;border-top:0.5px solid "+RB[k]+";padding-top:8px'>";
-      recent.forEach(function(p){ h+="<div style='font-size:11px;color:#555;padding:3px 0'>"+(p.important?"🔴 ":"")+esc(p.content.slice(0,40))+(p.content.length>40?"…":"")+"</div>"; });
-      h+="</div>";
-    }
-    h+="</div>";
-  });
-  return h;
-}
-
-function renderChangePw() {
-  return "<div class='nav'><button class='nav-back' data-view='main'>←</button><div class='nav-title'>비밀번호 변경</div></div>" +
-         "<div class='card'>" +
-         "<div style='margin-bottom:10px'><div class='sec'>현재 비밀번호</div><input type='password' id='old-pw' class='input'></div>" +
-         "<div style='margin-bottom:10px'><div class='sec'>새 비밀번호</div><input type='password' id='new-pw1' class='input'></div>" +
-         "<div style='margin-bottom:14px'><div class='sec'>새 비밀번호 확인</div><input type='password' id='new-pw2' class='input'></div>" +
-         "<div id='chpw-err' class='err' style='margin-bottom:8px'></div>" +
-         "<button class='btn-dark' id='btn-chpw'>변경하기</button></div>";
+// ── renderChangePw ──
+function renderChangePw(){
+  return "<div class='nav'><button class='nav-back' data-view='main'>←</button><div class='nav-title'>비밀번호 변경</div></div>"+
+         "<div class='card'>"+
+         "<div style='margin-bottom:10px'><div class='sec'>현재 비밀번호</div><input type='password' id='old-pw' class='input'></div>"+
+         "<div style='margin-bottom:10px'><div class='sec'>새 비밀번호</div><input type='password' id='new-pw1' class='input'></div>"+
+         "<div style='margin-bottom:14px'><div class='sec'>새 비밀번호 확인</div><input type='password' id='new-pw2' class='input'></div>"+
+         "<div id='chpw-err' class='err' style='margin-bottom:8px'></div>"+
+         "<button class='btn btn-dark btn-block' id='btn-chpw'>변경하기</button></div>";
 }
 
 // ── render ──
-function render() {
-  var app = document.getElementById("app");
-  if (!app) return;
-  if (!isAuth) { app.innerHTML = renderAuth(); bindAuth(); return; }
-  var content = "";
-  if      (view==="notice")    content = renderNotice();
-  else if (view==="pins")      content = renderPins();
-  else if (view==="poststats") content = renderPostStats();
-  else if (view==="change-pw") content = renderChangePw();
-  else                         content = renderMain();
-  app.innerHTML = content;
+function render(){
+  var app=document.getElementById('app');
+  if(!app) return;
+  if(!isAuth){app.innerHTML=renderAuth();bindAuth();return;}
+  var content='';
+  if(view==='notice')    content=renderNotice();
+  else if(view==='pins') content=renderPins();
+  else if(view==='poststats') content=renderPostStats();
+  else if(view==='change-pw') content=renderChangePw();
+  else content=renderMain();
+  app.innerHTML=content;
   bindMain();
 }
 
 // ── bindAuth ──
-function bindAuth() {
-  var app = document.getElementById("app");
-  if (!app) return;
-  var setupBtn = document.getElementById("btn-setup");
-  if (setupBtn) {
-    setupBtn.onclick = function() {
-      var p1 = document.getElementById("pw1").value;
-      var p2 = document.getElementById("pw2").value;
-      var err = document.getElementById("auth-err");
-      if (p1.length < 4) { err.textContent="4자 이상 입력해 주세요."; return; }
-      if (p1 !== p2)      { err.textContent="비밀번호가 일치하지 않습니다."; return; }
-      localStorage.setItem(HKEY, hashPw(p1));
-      isAuth = true; view = "main";
-      render();
-      toast("✅ 비밀번호 설정 완료");
+function bindAuth(){
+  var app=document.getElementById('app');
+  var setupBtn=document.getElementById('btn-setup');
+  if(setupBtn){
+    setupBtn.onclick=function(){
+      var p1=document.getElementById('pw1').value;
+      var p2=document.getElementById('pw2').value;
+      var err=document.getElementById('auth-err');
+      if(p1.length<4){err.textContent='4자 이상 입력해 주세요.';return;}
+      if(p1!==p2){err.textContent='비밀번호가 일치하지 않습니다.';return;}
+      localStorage.setItem(HKEY,hashPw(p1));
+      isAuth=true;view='main';render();toast('✅ 비밀번호 설정 완료');
     };
   }
-  var loginBtn = document.getElementById("btn-login");
-  if (loginBtn) {
-    loginBtn.onclick = function() {
-      var pw = document.getElementById("pw").value;
-      var err = document.getElementById("auth-err");
-      var stored = localStorage.getItem(HKEY) || "";
-      if (!pw)     { err.textContent="비밀번호를 입력해 주세요."; return; }
-      if (!stored) { err.textContent="비밀번호가 설정되지 않았습니다."; return; }
-      if (verifyPw(pw, stored)) {
-        isAuth = true; view = "main";
-        render();
-        Promise.all([gasRead("getSettings"),gasRead("getMsgs"),gasRead("getNotices"),gasRead("getPosts")])
+  var loginBtn=document.getElementById('btn-login');
+  if(loginBtn){
+    loginBtn.onclick=function(){
+      var pw=document.getElementById('pw').value;
+      var err=document.getElementById('auth-err');
+      var stored=localStorage.getItem(HKEY)||'';
+      if(!pw){err.textContent='비밀번호를 입력해 주세요.';return;}
+      if(!stored){err.textContent='비밀번호가 설정되지 않았습니다.';return;}
+      if(verifyPw(pw,stored)){
+        isAuth=true;view='main';render();
+        Promise.all([gasRead('getSettings'),gasRead('getMsgs'),gasRead('getNotices'),gasRead('getPosts')])
           .then(function(res){
             if(res[0]){settings=res[0];ls_set(SKEY,res[0]);if(!settings.pins)settings.pins={};}
             if(res[1]){msgs=res[1];ls_set(MKEY,res[1]);}
             if(res[2]){notices=res[2];ls_set(NKEY,res[2]);}
             if(res[3]){posts=res[3];ls_set(PKEY,res[3]);}
-            syncStatus="☁ "+new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})+" 동기화";
+            syncStatus='☁ '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+' 동기화';
             render();
-          }).catch(function(){syncStatus="⚠ GAS 연결 안됨";});
-      } else {
-        err.textContent="비밀번호가 올바르지 않습니다.";
-      }
+          }).catch(function(){syncStatus='⚠ GAS 연결 안됨';});
+      }else{err.textContent='비밀번호가 올바르지 않습니다.';}
     };
-    var pwInput = document.getElementById("pw");
-    if (pwInput) pwInput.onkeydown = function(e){ if(e.key==="Enter") loginBtn.click(); };
+    var pwInput=document.getElementById('pw');
+    if(pwInput) pwInput.onkeydown=function(e){if(e.key==='Enter') loginBtn.click();};
   }
-  var resetBtn = document.getElementById("btn-reset");
-  if (resetBtn) {
-    resetBtn.onclick = function() {
-      if (confirm("비밀번호를 초기화하시겠습니까?")) {
-        localStorage.removeItem(HKEY); render();
-      }
-    };
-  }
+  var resetBtn=document.getElementById('btn-reset');
+  if(resetBtn) resetBtn.onclick=function(){if(confirm('비밀번호를 초기화하시겠습니까?')){localStorage.removeItem(HKEY);render();}};
 }
 
 // ── bindMain ──
-function bindMain() {
-  var app = document.getElementById("app");
-  if (!app) return;
-  app.querySelectorAll("[data-view]").forEach(function(btn){
-    btn.onclick = function(){ view=btn.dataset.view; render(); };
-  });
-  var lockBtn = document.getElementById("btn-lock");
-  if (lockBtn) lockBtn.onclick = function(){ isAuth=false; view="auth"; render(); };
+function bindMain(){
+  var app=document.getElementById('app');
+  if(!app) return;
+  app.querySelectorAll('[data-view]').forEach(function(btn){btn.onclick=function(){view=btn.dataset.view;render();};});
+  var lockBtn=document.getElementById('btn-lock');
+  if(lockBtn) lockBtn.onclick=function(){isAuth=false;view='auth';render();};
 
   // 공지 게시
-  var pnBtn = document.getElementById("btn-post-notice");
-  if (pnBtn) {
-    pnBtn.onclick = function() {
-      var content=(document.getElementById("nt-content")||{value:""}).value.trim();
-      var title  =(document.getElementById("nt-title")  ||{value:""}).value.trim();
-      var type   =(document.getElementById("nt-type")   ||{value:"notice"}).value;
-      if (!content) { toast("내용을 입력해 주세요.",false); return; }
-      var n={id:Date.now()+"",title:title,content:content,type:type,createdAt:new Date().toISOString(),active:true};
-      notices=[n].concat(notices);
-      ls_set(NKEY,notices); gasWrite("saveNotices",notices);
-      toast("✅ 공고 게시 완료"); render();
-    };
-  }
+  var pnBtn=document.getElementById('btn-post-notice');
+  if(pnBtn) pnBtn.onclick=function(){
+    var content=(document.getElementById('nt-content')||{value:''}).value.trim();
+    var title=(document.getElementById('nt-title')||{value:''}).value.trim();
+    var type=(document.getElementById('nt-type')||{value:'notice'}).value;
+    if(!content){toast('내용을 입력해 주세요.',false);return;}
+    var n={id:Date.now()+'',title:title,content:content,type:type,createdAt:new Date().toISOString(),active:true};
+    notices=[n].concat(notices);
+    ls_set(NKEY,notices);gasWrite('saveNotices',notices);
+    toast('✅ 공고 게시 완료');render();
+  };
+
   // 공고 내리기
-  app.querySelectorAll("[data-archive]").forEach(function(btn){
-    btn.onclick = function(){
-      notices=notices.map(function(n){ return n.id===btn.dataset.archive?Object.assign({},n,{active:false}):n; });
-      ls_set(NKEY,notices); gasWrite("saveNotices",notices); render();
+  app.querySelectorAll('[data-archive]').forEach(function(btn){
+    btn.onclick=function(){
+      notices=notices.map(function(n){return n.id===btn.dataset.archive?Object.assign({},n,{active:false}):n;});
+      ls_set(NKEY,notices);gasWrite('saveNotices',notices);render();
     };
   });
+
+  // 포스트잇 삭제 (활성)
+  app.querySelectorAll('[data-del-post]').forEach(function(btn){
+    btn.onclick=function(){
+      var id=btn.dataset.delPost;
+      if(!confirm('이 포스트잇을 삭제하시겠습니까?')) return;
+      posts=posts.filter(function(p){return p.id!==id&&p.parentId!==id;});
+      savePosts(posts);toast('삭제 완료');render();
+    };
+  });
+
+  // 완료 포스트잇 삭제
+  app.querySelectorAll('[data-del-done]').forEach(function(btn){
+    btn.onclick=function(){
+      var id=btn.dataset.delDone;
+      if(!confirm('완료된 포스트잇을 삭제하시겠습니까?')) return;
+      posts=posts.filter(function(p){return p.id!==id&&p.parentId!==id;});
+      savePosts(posts);toast('삭제 완료');render();
+    };
+  });
+
+  // 완료 전체 삭제
+  var clearBtn=document.getElementById('btn-clear-all-done');
+  if(clearBtn) clearBtn.onclick=function(){
+    if(!confirm('완료된 포스트잇 전체를 삭제하시겠습니까?')) return;
+    var doneIds=posts.filter(function(p){return !!p.done&&!p.parentId;}).map(function(p){return p.id;});
+    posts=posts.filter(function(p){return !doneIds.includes(p.id)&&!doneIds.includes(p.parentId);});
+    savePosts(posts);toast('전체 삭제 완료');render();
+  };
+
   // PIN 설정
-  app.querySelectorAll("[data-set-pin]").forEach(function(btn){
-    btn.onclick = function(){
+  app.querySelectorAll('[data-set-pin]').forEach(function(btn){
+    btn.onclick=function(){
       var role=btn.dataset.setPin;
-      var pin=(document.getElementById("pin-"+role)||{value:""}).value.trim();
-      var msg=document.getElementById("pin-msg");
-      if(!/^\d{4}$/.test(pin)){
-        if(msg){msg.textContent="4자리 숫자를 입력해 주세요.";msg.style.color="#EF4444";} return;
-      }
-      btn.disabled=true; btn.textContent="...";
-      if(msg){msg.textContent="설정 중...";msg.style.color="#F59E0B";}
-      crypto.subtle.digest("SHA-256",new TextEncoder().encode(pin+"pab_pin_salt_2025"))
-        .then(function(buf){
-          var hash=Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0");}).join("");
-          if(role==="guest"){settings.guestPin=hash;}
-          else{if(!settings.pins)settings.pins={};settings.pins[role]=hash;}
-          saveSettings(settings);
-          btn.disabled=false; btn.textContent="설정";
-          if(msg){msg.textContent="✅ PIN 설정 완료";msg.style.color="#15803D";}
-          setTimeout(function(){render();},600);
-        }).catch(function(){btn.disabled=false;btn.textContent="설정";});
+      var pin=(document.getElementById('pin-'+role)||{value:''}).value.trim();
+      var msg=document.getElementById('pin-msg');
+      if(!/^\d{4}$/.test(pin)){if(msg){msg.textContent='4자리 숫자를 입력해 주세요.';msg.style.color='#EF4444';}return;}
+      btn.disabled=true;btn.textContent='...';
+      if(msg){msg.textContent='설정 중...';msg.style.color='#F59E0B';}
+      hashPin(pin).then(function(hash){
+        if(role==='guest'){settings.guestPin=hash;}
+        else{if(!settings.pins)settings.pins={};settings.pins[role]=hash;}
+        saveSettings(settings);
+        btn.disabled=false;btn.textContent='설정';
+        if(msg){msg.textContent='✅ PIN 설정 완료';msg.style.color='#15803D';}
+        setTimeout(function(){render();},600);
+      }).catch(function(){btn.disabled=false;btn.textContent='설정';});
     };
   });
+
   // PIN 초기화
-  app.querySelectorAll("[data-clear-pin]").forEach(function(btn){
-    btn.onclick = function(){
+  app.querySelectorAll('[data-clear-pin]').forEach(function(btn){
+    btn.onclick=function(){
       var role=btn.dataset.clearPin;
-      var label=ROLES[role]?ROLES[role].l:role;
-      if(confirm(label+" PIN을 초기화하시겠습니까?")){
-        if(role==="guest"){settings.guestPin="";}else{if(settings.pins)settings.pins[role]="";}
-        saveSettings(settings); render();
+      if(confirm(role+' PIN을 초기화하시겠습니까?')){
+        if(role==='guest'){settings.guestPin='';}else{if(settings.pins)settings.pins[role]='';}
+        saveSettings(settings);render();
       }
     };
   });
+
   // 비밀번호 변경
-  var chBtn=document.getElementById("btn-chpw");
-  if(chBtn){
-    chBtn.onclick=function(){
-      var old=(document.getElementById("old-pw") ||{value:""}).value;
-      var n1 =(document.getElementById("new-pw1")||{value:""}).value;
-      var n2 =(document.getElementById("new-pw2")||{value:""}).value;
-      var err=document.getElementById("chpw-err");
-      if(!old||!n1||!n2){err.textContent="모든 필드를 입력해 주세요.";return;}
-      if(n1!==n2){err.textContent="새 비밀번호가 일치하지 않습니다.";return;}
-      if(n1.length<4){err.textContent="4자 이상이어야 합니다.";return;}
-      var stored=localStorage.getItem(HKEY)||"";
-      if(!verifyPw(old,stored)){err.textContent="현재 비밀번호가 올바르지 않습니다.";return;}
-      localStorage.setItem(HKEY,hashPw(n1));
-      err.textContent="✅ 변경 완료!"; err.style.color="#15803D";
-      setTimeout(function(){view="main";render();},700);
-    };
-  }
+  var chBtn=document.getElementById('btn-chpw');
+  if(chBtn) chBtn.onclick=function(){
+    var old=(document.getElementById('old-pw')||{value:''}).value;
+    var n1=(document.getElementById('new-pw1')||{value:''}).value;
+    var n2=(document.getElementById('new-pw2')||{value:''}).value;
+    var err=document.getElementById('chpw-err');
+    if(!old||!n1||!n2){err.textContent='모든 필드를 입력해 주세요.';return;}
+    if(n1!==n2){err.textContent='새 비밀번호가 일치하지 않습니다.';return;}
+    if(n1.length<4){err.textContent='4자 이상이어야 합니다.';return;}
+    var stored=localStorage.getItem(HKEY)||'';
+    if(!verifyPw(old,stored)){err.textContent='현재 비밀번호가 올바르지 않습니다.';return;}
+    localStorage.setItem(HKEY,hashPw(n1));
+    err.textContent='✅ 변경 완료!';err.style.color='#15803D';
+    setTimeout(function(){view='main';render();},700);
+  };
 }
 
 // ── 시작 ──
-msgs     = ls_get(MKEY,[]);
-notices  = ls_get(NKEY,[]);
-settings = ls_get(SKEY,{pins:{}});
-posts    = ls_get(PKEY,[]);
+msgs=ls_get(MKEY,[]);notices=ls_get(NKEY,[]);
+settings=ls_get(SKEY,{pins:{}});posts=ls_get(PKEY,[]);
 if(!settings.pins) settings.pins={};
 render();
 </script>
