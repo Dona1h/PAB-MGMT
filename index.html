@@ -409,7 +409,7 @@ async function resolvePin(pin, settings) {
 function updateTabBar() {
   const boardBtn = document.querySelector('.tab-btn[data-tab="board"]');
   if (!boardBtn) return;
-  if (window.appState.mode === 'manager' || window.appState.mode === 'staff') {
+  if (window.appState.mode === 'manager') {
     boardBtn.style.display = '';
   } else {
     boardBtn.style.display = 'none';
@@ -897,11 +897,13 @@ function initBoard() {
 
   // ── 포맷 ──
   function fmt(iso) {
-    var d = new Date(iso), diff = Date.now()-d;
-    if (diff<3600000)   return Math.floor(diff/60000)+'분 전';
-    if (diff<86400000)  return Math.floor(diff/3600000)+'시간 전';
-    if (diff<172800000) return '어제 '+d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    return d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    var d = new Date(iso);
+    var yy = d.getFullYear();
+    var mm = String(d.getMonth()+1).padStart(2,'0');
+    var dd = String(d.getDate()).padStart(2,'0');
+    var hh = String(d.getHours()).padStart(2,'0');
+    var mi = String(d.getMinutes()).padStart(2,'0');
+    return yy+'.'+mm+'.'+dd+' '+hh+':'+mi;
   }
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -974,7 +976,7 @@ function initBoard() {
     var v = ROLE_DEF[c.role]||{l:c.role,color:'#f5f5f5',border:'#ddd',dot:'#aaa'};
     var h = '<div class="pab-card pab-child-card" data-pid="'+c.id+'" data-parent="'+parentId+'" ';
     h += 'style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:155px;z-index:'+pos.z+';';
-    h += 'cursor:default;user-select:none;box-sizing:border-box;">';
+    h += 'cursor:default;user-select:none;box-sizing:border-box;pointer-events:all;">';
     h += '<div style="background:'+v.color+';border:1px solid '+v.border+';border-radius:10px;';
     h += 'box-shadow:0 4px 14px rgba(0,0,0,.13);">';
     // 헤더
@@ -1012,10 +1014,10 @@ function initBoard() {
     var children = childrenOf(p.id);
     var isAttaching = (attachParentId === p.id);
 
-    var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:160px;z-index:'+pos.z+';cursor:grab;user-select:none;box-sizing:border-box;">';
+    var h = '<div class="pab-card" data-pid="'+p.id+'" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:160px;z-index:'+pos.z+';cursor:grab;user-select:none;box-sizing:border-box;pointer-events:all;">';
 
     // 부모 카드 본체
-    h += '<div style="background:'+v.color+';border-radius:'+(children.length||isAttaching?'10px 10px 0 0':'10px')+';'+borderStyle+'box-sizing:border-box;">';
+    h += '<div style="background:'+v.color+';border-radius:12px;'+borderStyle+'box-sizing:border-box;">';
 
     // 중요 띠
     if (p.important) {
@@ -1034,7 +1036,27 @@ function initBoard() {
 
     h += '</div>'; // 부모 카드 본체 닫기
 
-    // 붙이기 draft (부모 카드 내 고정)
+    // 아들 카드들 — 계단식(20px) + 겹침(-12px) + 전체 라운드
+    children.forEach(function(c, ci) {
+      var cv = ROLE_DEF[c.role]||{l:c.role,color:'#f5f5f5',border:'#ddd',dot:'#aaa'};
+      var isLast = (ci === children.length-1) && !isAttaching;
+      var indent = (ci+1)*20;
+      h += '<div style="margin-left:'+indent+'px;margin-top:-12px;">';
+      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 13px;box-shadow:0 3px 10px rgba(0,0,0,'+((0.06-(ci*0.01)).toFixed(2))+')">';
+      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">';
+      h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
+      h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;">'+esc(cv.l)+'</span>';
+      h += '<span style="font-size:10px;color:#bbb;">'+fmt(c.createdAt)+'</span>';
+      if (isLast && myRole) {
+        h += '<button data-done-post="'+p.id+'" data-done-all="true" style="width:20px;height:20px;border-radius:50%;background:#3B82F6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="전체 처리완료">';
+        h += '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><polyline points="1.5,4.5 3.5,6.5 7.5,2.5"/></svg></button>';
+      }
+      h += '</div>';
+      h += '<div style="font-size:12px;color:#1a1a1a;line-height:1.6;white-space:pre-wrap;word-break:break-all;">'+esc(c.content)+'</div>';
+      h += '</div></div>';
+    });
+
+    // 붙이기 draft
     if (isAttaching) h += renderAttachDraft(p.id);
 
     // 푸터 — 최하단 고정
@@ -1056,7 +1078,7 @@ function initBoard() {
   // ── draft 카드 (인라인 작성) ──
   function renderDraftCard(pos) {
     var v = myRole ? (ROLE_DEF[myRole]||{}) : { color:'#f5f5f5', border:'#ddd', dot:'#aaa', l:'작성' };
-    var h = '<div class="pab-card pab-draft" data-pid="__draft__" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:160px;z-index:'+(zCounter+50)+';box-sizing:border-box;">';
+    var h = '<div class="pab-card pab-draft" data-pid="__draft__" style="position:absolute;left:'+pos.x+'px;top:'+pos.y+'px;width:160px;z-index:'+(zCounter+50)+';box-sizing:border-box;pointer-events:all;">';
     h += '<div style="background:'+v.color+';border:1.5px dashed '+v.border+';border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.12);">';
 
     // 헤더
@@ -1093,39 +1115,24 @@ function initBoard() {
       }
     });
 
-    // 자식 카드 절대좌표 계산 (겹침 효과)
-    var CHILD_DX = 10, CHILD_DY = 36; // 아들이 엄마보다 오른쪽+아래로 오프셋
-    active.forEach(function(p) {
-      var pos = desk[p.id]||{x:10,y:10,z:1};
-      childrenOf(p.id).forEach(function(c, ci) {
-        if (!desk[c.id]) {
-          desk[c.id] = {
-            x: pos.x + CHILD_DX * (ci+1),
-            y: pos.y + CHILD_DY * (ci+1),
-            z: pos.z + ci + 1
-          };
-        }
-      });
-    });
+    // 자식은 부모 DOM 내부 수직 배치 (별도 좌표 불필요)
 
-    // 캔버스 높이 계산
+    // 캔버스 높이 계산 (자식 카드 포함)
     var maxBottom = 300;
     active.forEach(function(p) {
       var pos = desk[p.id]||{y:0};
-      if (pos.y + 220 > maxBottom) maxBottom = pos.y + 220;
+      var childCount = childrenOf(p.id).length;
+      var cardH = 180 + childCount * 80 + (attachParentId===p.id ? 120 : 0);
+      if (pos.y + cardH > maxBottom) maxBottom = pos.y + cardH;
     });
     if (draftId) maxBottom += 220;
 
-    var h = '<div id="pab-canvas" style="position:relative;width:100%;min-height:'+(maxBottom+60)+'px;touch-action:none;">';
+    var h = '<div id="pab-canvas" style="position:relative;width:100%;min-height:'+(maxBottom+60)+'px;touch-action:none;pointer-events:none;">';
     // 부모 먼저, 자식 나중 (자식이 위에 보임)
     active.forEach(function(p) {
       var pos = desk[p.id]||{x:10,y:10,z:1};
       h += renderCard(p, pos, desk);
-      // 자식 카드들 (부모 위에 겹침 - 캔버스 레벨 절대좌표)
-      childrenOf(p.id).forEach(function(c, ci) {
-        var cpos = desk[c.id]||{x:pos.x+10*(ci+1), y:pos.y+36*(ci+1), z:pos.z+ci+1};
-        h += renderChildCard(c, cpos, p.id);
-      });
+      // 자식 카드는 renderCard 내부에서 수직으로 처리됨
     });
 
     // draft 카드
