@@ -93,7 +93,6 @@
   <button class="tab-btn" data-tab="calendar">📅 월중등록 달력</button>
   <button class="tab-btn" data-tab="kids">🧒 키즈 회차계산기</button>
   <button class="tab-btn" data-tab="refund">💸 환불 계산기</button>
-  <button class="tab-btn" data-tab="board" id="tab-board-btn" style="display:none;">📌 포스트잇</button>
   <button class="tab-btn" data-tab="change">🔄 반변경 계산기</button>
 </div>
 
@@ -972,14 +971,18 @@ function initBoard() {
       // 카드 폭 고정 - margin-left 없음, margin-top:-12px만
       h += '<div style="margin-top:-12px;position:relative;z-index:'+childZ+';">';
       var childOp = (0.90 + ci*0.04).toFixed(2);
-      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);opacity:'+childOp+';">';
+      h += '<div style="background:'+cv.color+';border-radius:12px;padding:10px 12px;'+familyBorder+'opacity:'+childOp+';">';
       // 헤더: 엄마와 동일 구조 (dot + 역할 + 버튼)
       h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
       h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
+      // 아들 카드 테두리: 가족 중요 표시 반영
+      var familyBorder = p.important
+        ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 3px 10px rgba(239,68,68,.15);'
+        : 'border:1.5px solid '+cv.border+';box-shadow:0 3px 10px rgba(0,0,0,.07);';
       if (isLast && myRole) {
         h += '<div style="display:flex;gap:3px;flex-shrink:0;">';
-        h += btnRed(c.id, c.important);
+        h += btnRed(p.id, p.important);   // 부모 id 사용 → 가족 전체 토글
         h += btnGreen(p.id);
         h += btnBlue(p.id, '전체 처리완료');
         h += '</div>';
@@ -1122,13 +1125,18 @@ function initBoard() {
       var isLast = (ci === cc.length-1) && !isAtt;
       var childOp = (0.90 + ci*0.04).toFixed(2);
       h += '<div style="margin-top:-12px;position:relative;z-index:'+(ci+2)+';">';
-      h += '<div style="background:'+cv.color+';border:1.5px solid '+cv.border+';border-radius:12px;padding:10px 12px;box-shadow:0 3px 10px rgba(0,0,0,.07);opacity:'+childOp+';width:100%;box-sizing:border-box;">';
+      var gfBorder = p.important ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 3px 10px rgba(239,68,68,.15);' : 'border:1.5px solid '+cv.border+';box-shadow:0 3px 10px rgba(0,0,0,.07);';
+      h += '<div style="background:'+cv.color+';border-radius:12px;padding:10px 12px;'+gfBorder+'opacity:'+childOp+';width:100%;box-sizing:border-box;">';
       h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
       h += '<div style="width:7px;height:7px;border-radius:50%;background:'+cv.dot+';flex-shrink:0;"></div>';
       h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(cv.l)+'</span>';
+      // 아들 카드 테두리: 가족 중요 표시 반영
+      var familyBorder = p.important
+        ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 3px 10px rgba(239,68,68,.15);'
+        : 'border:1.5px solid '+cv.border+';box-shadow:0 3px 10px rgba(0,0,0,.07);';
       if (isLast && myRole) {
         h += '<div style="display:flex;gap:3px;flex-shrink:0;">';
-        h += btnRed(c.id, c.important);
+        h += btnRed(p.id, p.important);   // 부모 id 사용 → 가족 전체 토글
         h += btnGreen(p.id);
         h += btnBlue(p.id, '전체 처리완료');
         h += '</div>';
@@ -1353,7 +1361,7 @@ function initBoard() {
     if(!canvas) return;
     var dragging=null,sx,sy,ox,oy,moved=false;
     function onStart(e){
-      if (sortMode !== 'mydesk') return; // 정렬 모드에선 드래그 비활성
+      if (sortMode !== 'mydesk') return;
       var card=e.target.closest('.pab-card');
       if(!card||card.classList.contains('pab-draft')) return;
       if(e.target.closest('button')||e.target.closest('textarea')||e.target.closest('input')||e.target.closest('label')) return;
@@ -1363,6 +1371,10 @@ function initBoard() {
       var id=card.dataset.pid,desk=myRole?loadDesk(myRole):{};
       ox=desk[id]?desk[id].x:0;oy=desk[id]?desk[id].y:0;
       zCounter++;card.style.zIndex=zCounter+100;card.style.cursor='grabbing';
+      // 드래그 시작: 다른 카드 흐리게
+      canvas.querySelectorAll('.pab-card').forEach(function(c){
+        if(c!==card) c.style.opacity='0.55';
+      });
     }
     function onMove(e){
       if(!dragging) return;
@@ -1379,7 +1391,12 @@ function initBoard() {
       if(!dragging) return;
       var id=dragging.dataset.pid;
       if(moved&&myRole){var nx=parseInt(dragging.style.left)||0,ny=parseInt(dragging.style.top)||0;var desk=loadDesk(myRole);desk[id]={x:nx,y:ny,z:zCounter};saveDesk(myRole,desk);}
-      dragging.style.cursor='grab';dragging=null;moved=false;
+      dragging.style.cursor='grab';
+      // 드래그 종료: 모든 카드 opacity 복원
+      canvas.querySelectorAll('.pab-card').forEach(function(c){
+        c.style.opacity='';
+      });
+      dragging=null;moved=false;
     }
     canvas.addEventListener('mousedown',onStart);
     canvas.addEventListener('touchstart',onStart,{passive:false});
