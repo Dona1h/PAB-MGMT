@@ -87,7 +87,6 @@ const MKEY = 'pab-msgs-v1';
 const NKEY = 'pab-notices-v1';
 const SKEY = 'pab-settings-v1';
 // adminHash는 settings 안에서 관리 (GAS 동기화됨)
-const ITER = 10000;
 const PIN_SALT = 'pab_pin_salt_2025';
 
 const ROLES = {
@@ -118,21 +117,28 @@ function saveMsgs(d)     { ls_set(MKEY, d); gasWrite('saveMsgs', d); }
 function saveNotices(d)  { ls_set(NKEY, d); gasWrite('saveNotices', d); }
 function saveSettings(d) { ls_set(SKEY, d); gasWrite('saveSettings', d); }
 
-// ── 비밀번호 (PBKDF2) ──
-async function deriveKey(pw, salt) {
-  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:ITER, hash:'SHA-256' }, km, 256);
-  return Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
+// ── 비밀번호 (SHA-256 + salt) ──
 async function hashPw(pw) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await deriveKey(pw, salt);
-  return Array.from(salt).map(b=>b.toString(16).padStart(2,'0')).join('') + ':' + hash;
+  const salt = Array.from(crypto.getRandomValues(new Uint8Array(8)))
+    .map(b=>b.toString(16).padStart(2,'0')).join('');
+  const buf = await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(salt + pw + 'pab_admin_2025'));
+  const hash = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  return salt + ':' + hash;
 }
 async function verifyPw(pw, stored) {
-  const [saltHex, storedHash] = stored.split(':');
-  const salt = new Uint8Array(saltHex.match(/.{2}/g).map(b => parseInt(b, 16)));
-  return await deriveKey(pw, salt) === storedHash;
+  if (!stored || !stored.includes(':')) return false;
+  const [salt, storedHash] = stored.split(':');
+  // 구형식(PBKDF2 32바이트 salt) 감지 → 자동 초기화
+  if (salt.length > 20) {
+    settings.adminHash = '';
+    ls_set(SKEY, settings);
+    return false;
+  }
+  const buf = await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(salt + pw + 'pab_admin_2025'));
+  const hash = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  return hash === storedHash;
 }
 
 // ── PIN 해시 ──
