@@ -192,10 +192,11 @@
   <!-- ③ 아쿠아로빅 -->
   <div class="box">
     <div class="box-head">아쿠아로빅 <span class="box-badge">기간제 · 30일 기준 일할계산</span></div>
-    <table class="t">
+    <table class="t" style="table-layout:fixed;min-width:0;">
+      <colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>
       <thead>
         <tr>
-          <th>프로그램</th>
+          <th style="text-align:left;">프로그램</th>
           <th>정가<br><span style="font-weight:400">(일일가)</span></th>
           <th>3개월 −10%<br><span style="font-weight:400">3개월 합계 (월)</span></th>
         </tr>
@@ -213,10 +214,11 @@
   <!-- ④ 키즈 -->
   <div class="box">
     <div class="box-head">키즈 수영 <span class="box-badge">횟수제 · 3개월 10% 할인 적용</span></div>
-    <table class="t">
+    <table class="t" style="table-layout:fixed;min-width:0;">
+      <colgroup><col style="width:40%"><col style="width:30%"><col style="width:30%"></colgroup>
       <thead>
         <tr>
-          <th>프로그램</th>
+          <th style="text-align:left;">프로그램</th>
           <th>정가<br><span style="font-weight:400">(회당)</span></th>
           <th>3개월 −10%<br><span style="font-weight:400">회당 × 3개월 실수업 횟수</span></th>
         </tr>
@@ -285,7 +287,7 @@
 // =============================================================
 // GAS 통신 레이어 (JSONP + script GET)
 // =============================================================
-var GAS_URL   = 'https://script.google.com/macros/s/AKfycbw-bGN4TQDrVHS1D9LlH7ZTqJ8cjvkDjkjAmkeIOIivkuv7PmTfhqLWBg6cTP1XfuYb/exec';
+var GAS_URL   = 'https://script.google.com/macros/s/AKfycbzQTZ5oXtWUaOXXyS9rKeX7UMXleV1lJzDgx6FfhBqm8VH9z1wj8Z8DWDODr7yjr70/exec';
 var GAS_TOKEN = 'pab2024';
 
 function gasRead(action) {
@@ -362,7 +364,7 @@ function matchPin(pin, hash) {
 }
 function resolvePin(pin, settings) {
   if (!settings) return Promise.resolve(null);
-  var roles = ['morning','afternoon','evening'];
+  var roles = ['morning','afternoon','evening','staff'];
   return matchPin(pin, settings.guestPin || '').then(function(g) {
     if (g) return { mode: 'guest', role: null };
     var idx = 0;
@@ -370,7 +372,7 @@ function resolvePin(pin, settings) {
       if (idx >= roles.length) return Promise.resolve(null);
       var r = roles[idx++];
       return matchPin(pin, (settings.pins && settings.pins[r]) || '').then(function(ok) {
-        if (ok) return { mode: 'manager', role: r };
+        if (ok) return r === 'staff' ? { mode: 'staff', role: 'staff' } : { mode: 'manager', role: r };
         return next();
       });
     }
@@ -381,7 +383,7 @@ function resolvePin(pin, settings) {
 function updateTabBar() {
   var btn = document.getElementById('tab-board-btn');
   if (!btn) return;
-  btn.style.display = (window.appState.mode === 'manager') ? '' : 'none';
+  btn.style.display = (window.appState.mode === 'manager' || window.appState.mode === 'staff') ? '' : 'none';
   var lockBtn = document.getElementById('app-lock-btn');
   if (lockBtn) lockBtn.style.display = '';
 }
@@ -413,7 +415,7 @@ function insertLockButton() {
 function makePinKeypad(onKey) {
   var wrap = document.createElement('div');
   wrap.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:260px;';
-  ['1','2','3','4','5','6','7','8','9','←','0','✓'].forEach(function(k) {
+  ['1','2','3','4','5','6','7','8','9','←','0',''].forEach(function(k) {
     var btn = document.createElement('button');
     btn.textContent = k;
     var isEnter = (k === '✓'), isDel = (k === '←');
@@ -529,7 +531,33 @@ function showPinScreen() {
         });
         return;
       }
-      if (pinInput.length < 4) { pinInput += k; draw(); }
+      if (pinInput.length < 4) {
+        pinInput += k;
+        if (pinInput.length === 4) {
+          draw();
+          setTimeout(function() {
+            resolvePin(pinInput, settings).then(function(result) {
+              if (result) {
+                setPinFails(0);
+                window.appState = result;
+                window._boardRoleOverride = (result.mode === 'manager') ? result.role : null;
+                overlay.remove(); updateTabBar(); insertLockButton();
+                if (result.mode === 'manager' && window._boardRefresh) window._boardRefresh();
+              } else {
+                var fails = getPinFails() + 1;
+                setPinFails(fails);
+                if (fails >= MAX_FAILS) { setLockUntil(Date.now()+LOCK_SECS*1000); setPinFails(0); }
+                pinInput = ''; draw();
+                setTimeout(function() {
+                  var e = document.getElementById('pin-err');
+                  if (e) e.textContent = fails >= MAX_FAILS ? '5회 실패 — '+LOCK_SECS+'초 잠금' : 'PIN이 올바르지 않습니다. ('+fails+'/5)';
+                }, 30);
+              }
+            });
+          }, 120);
+        } else { draw(); }
+        return;
+      }
     }));
   }
 
@@ -621,59 +649,210 @@ document.addEventListener('DOMContentLoaded', function() {
   showPinScreen();
 });
 
+
+// ── 회원가입 PIN 설정 (showPinRegister) ──
+function showPinRegister(role, onSuccess) {
+  var ROLE_DEF_R = {
+    morning:   '오전 매니저님',
+    afternoon: '오후 매니저님',
+    evening:   '저녁 매니저님',
+    staff:     '직원'
+  };
+  var ROLE_COLOR_R = {
+    morning:   '#FFF0ED',
+    afternoon: '#FFFDE7',
+    evening:   '#F0FFF4',
+    staff:     '#EFF6FF'
+  };
+  var roleLabel = ROLE_DEF_R[role] || role;
+  var roleColor = ROLE_COLOR_R[role] || '#f5f5f5';
+  var step = 0, bufs = ['',''], pinInput = '';
+
+  var overlay = document.createElement('div');
+  overlay.id = 'app-pin-register';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#f5f6f7;z-index:9999;display:flex;flex-direction:column;align-items:center;padding:40px 20px;box-sizing:border-box;overflow-y:auto;';
+
+  function draw() {
+    while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+
+    var backWrap = document.createElement('div');
+    backWrap.style.cssText = 'width:100%;max-width:280px;margin-bottom:20px;';
+    var backBtn = document.createElement('button');
+    backBtn.textContent = '← 돌아가기';
+    backBtn.style.cssText = 'border:none;background:none;cursor:pointer;font-size:13px;color:#888;padding:0;';
+    backBtn.onclick = function() { overlay.remove(); };
+    backWrap.appendChild(backBtn);
+    overlay.appendChild(backWrap);
+
+    // 역할 표시
+    var badge = document.createElement('div');
+    badge.style.cssText = 'background:' + roleColor + ';border-radius:12px;padding:12px 20px;margin-bottom:20px;text-align:center;max-width:280px;';
+    badge.innerHTML = '<div style="font-size:15px;font-weight:600;color:#1a1a1a;margin-bottom:2px;">' + roleLabel + '</div>' +
+      '<div style="font-size:11px;color:#888;">' + (step===0?'새 PIN 입력 (4자리)':'PIN 확인 (한 번 더 입력)') + '</div>';
+    overlay.appendChild(badge);
+
+    overlay.appendChild(makeDots(pinInput.length));
+
+    var errDiv = document.createElement('div');
+    errDiv.id = 'preg-err';
+    errDiv.style.cssText = 'font-size:12px;color:#EF4444;min-height:18px;margin-bottom:12px;text-align:center;';
+    overlay.appendChild(errDiv);
+
+    overlay.appendChild(makePinKeypad(function(k) {
+      var err = document.getElementById('preg-err');
+      if (k === '←') { pinInput = pinInput.slice(0,-1); draw(); return; }
+      if (k === '✓' || pinInput.length === 3) {
+        // 자동 제출 or 수동
+        if (k !== '←') {
+          if (k !== '✓') pinInput += k;
+          if (pinInput.length !== 4) { if (err) err.textContent = '4자리를 입력해 주세요.'; return; }
+        } else return;
+        bufs[step] = pinInput;
+        if (step === 0) {
+          step = 1; pinInput = ''; draw(); return;
+        }
+        // 확인 단계
+        if (bufs[0] !== bufs[1]) {
+          pinInput = ''; step = 0; draw();
+          setTimeout(function(){ var e=document.getElementById('preg-err'); if(e) e.textContent='PIN이 일치하지 않습니다. 다시 입력해 주세요.'; }, 30);
+          return;
+        }
+        // 저장
+        sha256pin(bufs[0]).then(function(hash) {
+          var settings = ls_get('pab-settings-v1', { pins:{}, guestPin:'', adminHash:'' });
+          if (!settings.pins) settings.pins = {};
+          settings.pins[role] = hash;
+          ls_set('pab-settings-v1', settings);
+          gasWrite('saveSettings', settings);
+          overlay.remove();
+          showToast('✅ ' + roleLabel + ' 등록 완료!');
+          if (onSuccess) onSuccess();
+        });
+        return;
+      }
+      if (pinInput.length < 4) {
+        pinInput += k;
+        if (pinInput.length === 4) {
+          draw();
+          setTimeout(function() {
+            bufs[step] = pinInput;
+            if (step === 0) { step=1; pinInput=''; draw(); }
+            else {
+              if (bufs[0] !== bufs[1]) {
+                pinInput=''; step=0; draw();
+                setTimeout(function(){ var e=document.getElementById('preg-err'); if(e) e.textContent='PIN이 일치하지 않습니다.'; }, 30);
+              } else {
+                sha256pin(bufs[0]).then(function(hash) {
+                  var settings = ls_get('pab-settings-v1', { pins:{}, guestPin:'', adminHash:'' });
+                  if (!settings.pins) settings.pins = {};
+                  settings.pins[role] = hash;
+                  ls_set('pab-settings-v1', settings);
+                  gasWrite('saveSettings', settings);
+                  overlay.remove();
+                  showToast('✅ ' + roleLabel + ' 등록 완료!');
+                  if (onSuccess) onSuccess();
+                });
+              }
+            }
+          }, 120);
+        } else { draw(); }
+      }
+    }));
+  }
+
+  draw();
+  document.body.appendChild(overlay);
+}
+
+
 // =============================================================
-// 📌 포스트잇 (initBoard)
+// 📌 포스트잇 보드 v2 — 공유 대시보드
 // =============================================================
 function initBoard() {
-  var MKEY = 'pab-msgs-v1';
-  var NKEY = 'pab-notices-v1';
-  var SKEY = 'pab-settings-v1';
-  var CKEY = 'pab-common-v1';
-  var PIN_SALT_LOCAL = 'pab_pin_salt_2025';
+  var PKEY = 'pab-posts-v1';    // 포스트잇
+  var NKEY = 'pab-notices-v1';  // 공지사항
+  var SKEY = 'pab-settings-v1'; // 설정/PIN
 
-  var ROLES = {
-    morning:   { l:'오전 매니저님', bg:'#EFF6FF', tx:'#1D4ED8', init:'오전' },
-    afternoon: { l:'오후 매니저님', bg:'#F0FDF4', tx:'#15803D', init:'오후' },
-    evening:   { l:'저녁 매니저님', bg:'#FFFBEB', tx:'#B45309', init:'저녁' }
+  // 역할 정의
+  var ROLE_DEF = {
+    morning:   { l:'오전 매니저님', color:'#FFF0ED', border:'#FFBCAA', dot:'#FF7452', badge:'#FF7452' },
+    afternoon: { l:'오후 매니저님', color:'#FFFDE7', border:'#FFE082', dot:'#F59E0B', badge:'#F59E0B' },
+    evening:   { l:'저녁 매니저님', color:'#F0FFF4', border:'#86EFAC', dot:'#22C55E', badge:'#22C55E' },
+    staff:     { l:'직원',         color:'#EFF6FF', border:'#BFDBFE', dot:'#3B82F6', badge:'#3B82F6' }
   };
-  var TYPES = {
-    handover: { l:'전달사항', bg:'#F0FDF4', tx:'#15803D' },
-    caution:  { l:'주의사항', bg:'#FEF2F2', tx:'#B91C1C' }
-  };
-  var ALL = ['morning','afternoon','evening'];
+  var ROLE_KEYS = ['morning','afternoon','evening','staff'];
+  var LAYOUT_KEY = 'pab-layout-v1'; // sessionStorage — 드래그 좌표
 
-  var curRole = null, pinOK = false, view = 'home', pinInput = '';
-  var msgs = [], notices = [], settings = { pins:{} }, commonMsgs = [];
+  // 앱 상태
+  var myRole = null; // 현재 선택된 역할
+  var posts = [];
+  var notices = [];
+  var settings = { pins:{}, guestPin:'', adminHash:'' };
+  var view = 'board'; // 'board' | 'archive' | 'write' | 'register'
+  var sortMode = 'importance'; // 'importance' | 'time'
+  var dragState = null;
+  var zCounter = 10;
 
+  // ── 데이터 로드/저장 ──
   function loadLocal() {
-    msgs       = ls_get(MKEY, []);
-    notices    = ls_get(NKEY, []);
-    settings   = ls_get(SKEY, { pins:{} });
-    commonMsgs = ls_get(CKEY, []);
+    posts    = ls_get(PKEY, []);
+    notices  = ls_get(NKEY, []);
+    settings = ls_get(SKEY, { pins:{}, guestPin:'', adminHash:'' });
     if (!settings.pins) settings.pins = {};
   }
-  function saveMsgs()   { ls_set(MKEY, msgs);       gasWrite('saveMsgs',     msgs); }
-  function saveNotices(){ ls_set(NKEY, notices);     gasWrite('saveNotices',  notices); }
-  function saveCommon() { ls_set(CKEY, commonMsgs);  gasWrite('saveCommon',   commonMsgs); }
-  function saveSettings(){ ls_set(SKEY, settings);   gasWrite('saveSettings', settings); }
+  function savePosts() { ls_set(PKEY, posts); gasWrite('savePosts', posts); }
 
   function syncGAS() {
-    return Promise.all([gasRead('getMsgs'), gasRead('getNotices'), gasRead('getSettings'), gasRead('getCommon')])
+    return Promise.all([gasRead('getPosts'), gasRead('getNotices'), gasRead('getSettings')])
       .then(function(res) {
-        if (res[0]) { msgs       = res[0]; ls_set(MKEY, res[0]); }
-        if (res[1]) { notices    = res[1]; ls_set(NKEY, res[1]); }
-        if (res[2]) { settings   = res[2]; ls_set(SKEY, res[2]); }
-        if (res[3]) { commonMsgs = res[3]; ls_set(CKEY, res[3]); }
-        if (!settings.pins) settings.pins = {};
+        if (res[0]) { posts    = res[0]; ls_set(PKEY, res[0]); }
+        if (res[1]) { notices  = res[1]; ls_set(NKEY, res[1]); }
+        if (res[2]) { settings = res[2]; ls_set(SKEY, res[2]); if (!settings.pins) settings.pins = {}; }
       });
   }
 
-  function unreadFor(role) {
-    return msgs.filter(function(m){ return m.status && m.status[role] === 'unread' && m.from !== role; }).length;
+  // ── 레이아웃 (sessionStorage) ──
+  function getLayout() {
+    try { return JSON.parse(sessionStorage.getItem(LAYOUT_KEY) || '{}'); } catch(e) { return {}; }
   }
-  function rcpts(to) { return to === 'all' ? ALL : (ALL.indexOf(to) >= 0 ? [to] : []); }
-  function mySt(m) { return m.status && m.status[curRole] != null ? m.status[curRole] : null; }
+  function setLayout(layout) {
+    try { sessionStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch(e) {}
+  }
+  function clearLayout() {
+    try { sessionStorage.removeItem(LAYOUT_KEY); } catch(e) {}
+  }
 
+  // 그리드 자동 배치 (레이아웃 없을 때)
+  function autoLayout(postList) {
+    var layout = {};
+    var col = 0, row = 0, COLS = 2;
+    var W = 160, H = 180, GAP = 14, OFFSET_X = 10, OFFSET_Y = 10;
+    postList.forEach(function(p, i) {
+      layout[p.id] = { x: OFFSET_X + col*(W+GAP), y: OFFSET_Y + row*(H+GAP), z: i+1 };
+      col++;
+      if (col >= COLS) { col = 0; row++; }
+    });
+    return layout;
+  }
+
+  // ── 포스트잇 정렬 ──
+  function sortedActive() {
+    var active = posts.filter(function(p){ return !p.done; });
+    if (sortMode === 'importance') {
+      return active.sort(function(a, b) {
+        if (a.important && !b.important) return -1;
+        if (!a.important && b.important) return 1;
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
+    }
+    return active.sort(function(a,b){ return new Date(b.createdAt) - new Date(a.createdAt); });
+  }
+  function sortedDone() {
+    return posts.filter(function(p){ return !!p.done; })
+                .sort(function(a,b){ return new Date(b.done.at) - new Date(a.done.at); });
+  }
+
+  // ── 포맷 ──
   function fmt(iso) {
     var d = new Date(iso), diff = Date.now() - d;
     if (diff < 3600000)   return Math.floor(diff/60000) + '분 전';
@@ -682,217 +861,205 @@ function initBoard() {
     return d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   }
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function bdg(bg, tx, t) {
-    return '<span style="display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:6px;background:' + bg + ';color:' + tx + ';white-space:nowrap;">' + esc(t) + '</span>';
-  }
 
-  // ── 공통 대시보드 ──
-  function renderCommon() {
-    var active = commonMsgs.filter(function(m){ return !m.commonDone; })
-                           .sort(function(a,b){ return new Date(b.createdAt) - new Date(a.createdAt); });
+  // ── 공지사항 렌더 ──
+  function renderNotices() {
+    var active = notices.filter(function(n){ return n.active !== false; })
+                        .sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
     if (!active.length) return '';
-    var h = '<div style="background:#fff;border:1.5px solid #FBBF24;border-radius:14px;padding:14px;margin-bottom:16px;">';
-    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
-    h += '<div style="font-size:12px;font-weight:600;color:#92400E;">📋 매니저 공통 대시보드</div>';
-    h += '<span style="font-size:10px;color:#92400E;">' + active.length + '건 미처리</span></div>';
-    active.forEach(function(m) {
-      var tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
-      var rf = ROLES[m.from] || { bg:'#f5f6f7', tx:'#333', l:m.from };
-      h += '<div style="background:#FFFBEB;border:0.5px solid #FDE68A;border-radius:10px;padding:10px 12px;margin-bottom:8px;">';
-      h += '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:5px;">';
-      h += bdg(rf.bg, rf.tx, rf.l) + bdg(tp.bg, tp.tx, tp.l);
-      h += '<span style="font-size:10px;color:#bbb;margin-left:auto;">' + fmt(m.createdAt) + '</span></div>';
-      h += '<p style="font-size:13px;color:#1a1a1a;line-height:1.6;margin:0 0 8px;white-space:pre-wrap;">' + esc(m.content) + '</p>';
-      h += '<div style="display:flex;justify-content:flex-end;">';
-      h += '<button data-cdone="' + m.id + '" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#FEF3C7;color:#92400E;border:0.5px solid #FBBF24;cursor:pointer;font-weight:500;">처리완료</button>';
-      h += '</div></div>';
+    var LIMIT = 50;
+    var h = '<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:12px;padding:14px;margin-bottom:14px;">';
+    h += '<div style="font-size:12px;font-weight:600;color:#1a1a1a;margin-bottom:10px;">📢 전체 공고 <span style="font-size:10px;font-weight:400;color:#888;">(' + active.length + '건)</span></div>';
+    active.forEach(function(n) {
+      var short = n.content.length > LIMIT;
+      var nb = n.type==='policy'?'#FAF5FF':'#EFF6FF', nt = n.type==='policy'?'#7E22CE':'#1D4ED8';
+      h += '<div style="margin-bottom:8px;padding:8px 10px;border-radius:8px;border:0.5px solid ' + (n.type==='policy'?'#e4d0fe':'#bfdbfe') + ';background:#fff;">';
+      if (n.title) h += '<div style="font-size:11px;font-weight:600;color:#1a1a1a;margin-bottom:3px;">' + esc(n.title) + '</div>';
+      h += '<div id="nc-' + n.id + '" style="font-size:11px;color:#333;line-height:1.55;white-space:pre-wrap;">' + esc(short ? n.content.slice(0,LIMIT)+'…' : n.content) + '</div>';
+      if (short) h += '<button data-expand="' + n.id + '" data-full="' + esc(n.content) + '" style="font-size:10px;color:#888;background:none;border:none;cursor:pointer;padding:2px 0;">더보기 ▼</button>';
+      h += '<div style="font-size:10px;color:#bbb;margin-top:3px;">' + fmt(n.createdAt) + '</div></div>';
     });
     h += '</div>';
     return h;
   }
 
-  // ── 홈 ──
-  function renderHome() {
-    var activeN = notices.filter(function(n){ return n.active !== false; })
-                         .sort(function(a,b){ return new Date(b.createdAt) - new Date(a.createdAt); });
-    var policy  = activeN.filter(function(n){ return n.type === 'policy'; });
-    var general = activeN.filter(function(n){ return n.type === 'notice'; });
-    var LIMIT   = 50;
-
-    var h = '<div style="padding:.5rem 0 1.5rem;">';
-
-    // 공통 대시보드
-    h += renderCommon();
-
-    // 전체 공고
-    h += '<div style="background:#faf9fe;border:0.5px solid #e4e0f0;border-radius:14px;padding:16px;margin-bottom:20px;">';
-    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
-    h += '<div style="font-size:13px;font-weight:600;color:#1a1a1a;">📢 전체 공고</div>';
-    h += '<span style="font-size:10px;color:#888;">' + activeN.length + '건</span></div>';
-    if (!activeN.length) {
-      h += '<div style="text-align:center;padding:16px 0;color:#bbb;font-size:12px;">등록된 공고가 없습니다.</div>';
-    } else {
-      if (policy.length) {
-        h += '<div style="font-size:10px;font-weight:500;color:#7E22CE;margin-bottom:6px;">정책 공지</div>';
-        policy.forEach(function(n){ h += noticeCard(n, '#ede9fe', LIMIT); });
-      }
-      if (general.length) {
-        h += '<div style="font-size:10px;font-weight:500;color:#1D4ED8;margin:' + (policy.length?'10px':'0') + ' 0 6px;">일반 공지</div>';
-        general.forEach(function(n){ h += noticeCard(n, '#dbeafe', LIMIT); });
-      }
-    }
-    h += '</div>';
-
-    // 역할 선택
-    h += '<div style="text-align:center;margin-bottom:16px;">';
-    h += '<div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-bottom:4px;">매니저 수신함</div>';
-    h += '<div style="font-size:12px;color:#888;">출근 시 본인 역할을 선택해 주세요</div></div>';
-
-    Object.keys(ROLES).forEach(function(k) {
-      var v = ROLES[k];
-      var n = unreadFor(k);
-      var hasPIN = !!(settings.pins && settings.pins[k]);
-      h += '<button data-role="' + k + '" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:16px 18px;margin-bottom:10px;border-radius:12px;border:0.5px solid #e0e0e0;background:#fff;cursor:pointer;text-align:left;box-sizing:border-box;">';
-      h += '<div style="display:flex;align-items:center;gap:12px;">';
-      h += '<div style="width:40px;height:40px;border-radius:50%;background:' + v.bg + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;color:' + v.tx + ';">' + v.init + '</div>';
-      h += '<div><div style="font-size:14px;font-weight:500;color:#1a1a1a;">' + v.l + (hasPIN?' 🔒':'') + '</div>';
-      h += '<div style="font-size:11px;color:#888;margin-top:2px;">' + (n > 0 ? '미확인 ' + n + '건' : '새 메시지 없음') + '</div></div></div>';
-      h += n > 0 ? '<div style="background:#EF4444;color:#fff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;">' + n + '</div>' : '<span style="font-size:13px;color:#ccc;">›</span>';
-      h += '</button>';
+  // ── 역할 선택 바 ──
+  function renderRoleBar() {
+    var h = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">';
+    h += '<span style="font-size:11px;color:#888;margin-right:2px;">나:</span>';
+    ROLE_KEYS.forEach(function(k) {
+      var v = ROLE_DEF[k];
+      var hasPin = !!(settings.pins && settings.pins[k]);
+      var isMe = (k === myRole);
+      // 현재 앱 모드 확인 (매니저는 자기 역할만, 직원은 staff만)
+      var appRole = window.appState && window.appState.role;
+      var appMode = window.appState && window.appState.mode;
+      var canSelect = (appMode === 'manager' && k === appRole) || (appMode === 'staff' && k === 'staff');
+      h += '<button data-select-role="' + k + '" style="' +
+        'padding:5px 12px;border-radius:20px;font-size:11px;font-weight:' + (isMe?'600':'400') + ';' +
+        'border:' + (isMe?'1.5px solid '+v.border:'0.5px solid #ddd') + ';' +
+        'background:' + (isMe?v.color:'#fff') + ';' +
+        'color:#1a1a1a;cursor:' + (canSelect?'pointer':'default') + ';' +
+        'opacity:' + (canSelect||isMe?'1':'0.45') + ';' +
+        '">' + v.l.replace('님','') + '</button>';
     });
     h += '</div>';
     return h;
   }
 
-  function noticeCard(n, borderColor, LIMIT) {
-    var short = n.content.length > LIMIT;
-    var preview = short ? n.content.slice(0, LIMIT) + '…' : n.content;
-    var h = '<div style="background:#fff;border:0.5px solid ' + borderColor + ';border-radius:10px;padding:10px 12px;margin-bottom:6px;">';
-    if (n.title) h += '<div style="font-size:12px;font-weight:500;color:#1a1a1a;margin-bottom:3px;">' + esc(n.title) + '</div>';
-    h += '<div id="nc-' + n.id + '" style="font-size:12px;color:#333;line-height:1.6;white-space:pre-wrap;">' + esc(preview) + '</div>';
-    if (short) h += '<button data-expand="' + n.id + '" data-full="' + esc(n.content) + '" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;padding:2px 0;margin-top:2px;">더보기 ▼</button>';
-    h += '<div style="font-size:10px;color:#bbb;margin-top:4px;">' + fmt(n.createdAt) + '</div></div>';
-    return h;
-  }
-
-  // ── 헤더 ──
-  function roleHdr() {
-    var v = ROLES[curRole];
-    var h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">';
-    h += '<button data-back style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
-    h += '<div style="display:flex;align-items:center;gap:8px;flex:1;">';
-    h += '<div style="width:32px;height:32px;border-radius:50%;background:' + v.bg + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:' + v.tx + ';">' + v.init + '</div>';
-    h += '<div style="font-size:14px;font-weight:500;color:#1a1a1a;">' + v.l + '</div></div>';
-    h += '<button id="btn-pin-change" style="font-size:18px;border:none;background:none;cursor:pointer;padding:4px;color:#bbb;" title="PIN 설정">⚙</button>';
-    h += '<button data-view="compose" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>';
-    h += '</div>';
-    return h;
-  }
-
-  function tabRow(active) {
-    var h = '<div style="display:flex;border-bottom:0.5px solid #ddd;margin-bottom:14px;">';
-    h += '<button data-view="inbox" style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:' + (active==='inbox'?500:400) + ';color:' + (active==='inbox'?'#1a1a1a':'#888') + ';border-bottom:2px solid ' + (active==='inbox'?'#1a1a1a':'transparent') + ';">수신함</button>';
-    h += '<button data-view="sent"  style="padding:7px 16px;font-size:12px;border:none;background:none;cursor:pointer;font-weight:' + (active==='sent'?500:400)  + ';color:' + (active==='sent'?'#1a1a1a':'#888')  + ';border-bottom:2px solid ' + (active==='sent'?'#1a1a1a':'transparent')  + ';">발신함</button>';
-    h += '</div>';
-    return h;
-  }
-
-  function msgCard(m, st) {
-    var isU = (st === 'unread'), isDone = (st === 'done');
-    var rf = ROLES[m.from] || { bg:'#f5f6f7', tx:'#333', l:m.from };
-    var tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
-    var toL = m.to === 'all' ? '매니저 공통' : m.to === 'leader' ? '팀장' : (ROLES[m.to] ? ROLES[m.to].l : m.to);
-    var h = '<div style="background:' + (isU?'#F8FBFF':'#fff') + ';border:' + (isU?'1px solid #BFDBFE':'0.5px solid #e8e8e8') + ';border-radius:12px;padding:12px 14px;margin-bottom:8px;' + (isDone?'opacity:.45;':'') + '">';
-    h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:8px;">';
-    h += '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' + bdg(rf.bg,rf.tx,rf.l) + '<span style="font-size:11px;color:#bbb;">→ ' + esc(toL) + '</span>' + bdg(tp.bg,tp.tx,tp.l);
-    if (isU) h += '<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:20px;background:#3B82F6;color:#fff;">New</span>';
-    h += '</div><span style="font-size:11px;color:#bbb;flex-shrink:0;">' + fmt(m.createdAt) + '</span></div>';
-    h += '<p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ' + (isDone?'0':'8px') + ';font-weight:' + (isU?500:400) + ';white-space:pre-wrap;">' + esc(m.content) + '</p>';
-    if (!isDone) {
-      h += '<div style="display:flex;justify-content:flex-end;"><button data-done="' + m.id + '" style="font-size:11px;padding:4px 12px;border-radius:6px;background:#F0FDF4;color:#15803D;border:0.5px solid #86EFAC;cursor:pointer;font-weight:500;">처리완료</button></div>';
-    } else {
-      h += '<div style="font-size:10px;color:#bbb;text-align:right;margin-top:4px;">✓ 처리완료</div>';
+  // ── 툴바 ──
+  function renderToolbar() {
+    var doneCnt = sortedDone().length;
+    var h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">';
+    if (myRole) {
+      h += '<button data-view="write" style="padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">+ 작성</button>';
     }
+    h += '<button data-sort="importance" style="padding:6px 12px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:' + (sortMode==='importance'?'#1a1a1a':'#fff') + ';color:' + (sortMode==='importance'?'#fff':'#888') + ';cursor:pointer;">중요순</button>';
+    h += '<button data-sort="time" style="padding:6px 12px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:' + (sortMode==='time'?'#1a1a1a':'#fff') + ';color:' + (sortMode==='time'?'#fff':'#888') + ';cursor:pointer;">시간순</button>';
+    h += '<button data-sort-clear style="padding:6px 12px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:#fff;color:#888;cursor:pointer;">정렬초기화</button>';
+    h += '<button data-view="archive" style="padding:6px 12px;border-radius:8px;font-size:11px;border:0.5px solid #ddd;background:#fff;color:#888;cursor:pointer;margin-left:auto;">완료함 ' + (doneCnt?'<span style="background:#888;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;">'+doneCnt+'</span>':'') + '</button>';
     h += '</div>';
     return h;
   }
 
-  function sec(label, count, color, mt) {
-    return '<div style="font-size:10px;font-weight:500;color:' + color + ';letter-spacing:.06em;margin:' + (mt?'18px':'0') + ' 0 8px;">' + label + ' · ' + count + '건</div>';
-  }
+  // ── 포스트잇 카드 (캔버스 절대좌표) ──
+  function renderCard(p, pos) {
+    var v = ROLE_DEF[p.role] || { l:p.role, color:'#f5f5f5', border:'#ddd' };
+    var borderStyle = p.important
+      ? 'border:2px solid #EF4444;box-shadow:0 0 0 1px #EF4444,0 4px 16px rgba(239,68,68,.18);'
+      : 'border:1px solid ' + v.border + ';box-shadow:0 3px 12px rgba(0,0,0,.10);';
+    var h = '<div class="pab-card" data-pid="' + p.id + '" style="' +
+      'position:absolute;left:' + pos.x + 'px;top:' + pos.y + 'px;width:155px;' +
+      'background:' + v.color + ';border-radius:10px;' + borderStyle +
+      'z-index:' + pos.z + ';cursor:grab;user-select:none;box-sizing:border-box;transition:box-shadow .15s;">';
 
-  // ── 수신함 ──
-  function renderInbox() {
-    var ib   = msgs.filter(function(m){ return mySt(m) !== null && m.from !== curRole; });
-    var unrd = ib.filter(function(m){ return mySt(m) === 'unread'; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
-    var rd   = ib.filter(function(m){ return mySt(m) === 'read'; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
-    var dn   = ib.filter(function(m){ return mySt(m) === 'done'; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
-    var h = '<div style="padding:.5rem 0 1.5rem;">' + roleHdr() + tabRow('inbox');
-    if (!ib.length) { h += '<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">새로운 메시지가 없습니다.</div>'; }
-    else {
-      if (unrd.length) { h += sec('미확인', unrd.length, '#3B82F6', false); unrd.forEach(function(m){ h += msgCard(m,'unread'); }); }
-      if (rd.length)   { h += sec('확인함 (미처리)', rd.length, '#B45309', !!unrd.length); rd.forEach(function(m){ h += msgCard(m,'read'); }); }
-      if (dn.length)   { h += sec('처리완료', dn.length, '#bbb', !!(unrd.length||rd.length)); dn.slice(0,20).forEach(function(m){ h += msgCard(m,'done'); }); }
+    // 중요 띠
+    if (p.important) {
+      h += '<div style="background:#EF4444;border-radius:8px 8px 0 0;padding:3px 10px;font-size:10px;font-weight:600;color:#fff;letter-spacing:.04em;">🔴 중요</div>';
     }
+
+    // 헤더
+    h += '<div style="display:flex;align-items:center;gap:5px;padding:' + (p.important?'6px 8px 4px':'9px 8px 4px') + ';">';
+    h += '<div style="width:8px;height:8px;border-radius:50%;background:' + v.border + ';flex-shrink:0;"></div>';
+    h += '<span style="font-size:10px;font-weight:500;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(v.l) + '</span>';
+    // 중요 토글
+    h += '<button data-toggle-imp="' + p.id + '" title="중요 표시" style="border:none;background:none;cursor:pointer;font-size:12px;padding:0;opacity:' + (p.important?'1':'.4') + ';">🔴</button>';
     h += '</div>';
+
+    // 내용
+    h += '<div style="padding:4px 10px 8px;font-size:12px;color:#1a1a1a;line-height:1.6;min-height:60px;white-space:pre-wrap;word-break:break-all;">' + esc(p.content) + '</div>';
+
+    // 푸터
+    h += '<div style="padding:0 8px 8px;border-top:0.5px solid ' + v.border + ';margin-top:2px;">';
+    h += '<div style="font-size:10px;color:#888;margin-top:5px;">' + fmt(p.createdAt) + '</div>';
+    if (!p.done && myRole) {
+      h += '<button data-done-post="' + p.id + '" style="margin-top:5px;width:100%;padding:4px 0;border-radius:6px;font-size:11px;font-weight:500;background:rgba(0,0,0,.06);color:#333;border:none;cursor:pointer;">✓ 처리완료</button>';
+    }
+    h += '</div></div>';
     return h;
   }
 
-  // ── 발신함 ──
-  function renderSent() {
-    var sent = msgs.filter(function(m){ return m.from === curRole; }).sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); });
-    var stC = { done:'background:#F0FDF4;color:#15803D', read:'background:#FFFBEB;color:#B45309', unread:'background:#FEF2F2;color:#B91C1C' };
-    var stL = { done:'✓ 처리완료', read:'○ 확인함', unread:'● 미확인' };
-    var h = '<div style="padding:.5rem 0 1.5rem;">' + roleHdr() + tabRow('sent');
-    if (!sent.length) { h += '<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">보낸 메시지가 없습니다.</div>'; }
-    else {
-      sent.forEach(function(m) {
-        var tp = TYPES[m.type] || { bg:'#f5f6f7', tx:'#333', l:m.type };
-        var toL = m.to === 'all' ? '매니저 공통' : m.to === 'leader' ? '팀장' : (ROLES[m.to] ? ROLES[m.to].l : m.to);
-        var rList = (m.to === 'leader') ? [] : rcpts(m.to).filter(function(r){ return r !== curRole; });
-        h += '<div style="background:#fff;border:0.5px solid #e8e8e8;border-radius:12px;padding:12px 14px;margin-bottom:8px;">';
-        h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">';
-        h += '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">' + bdg(tp.bg,tp.tx,tp.l) + '<span style="font-size:11px;color:#bbb;">→ ' + esc(toL) + '</span></div>';
-        h += '<span style="font-size:11px;color:#bbb;flex-shrink:0;">' + fmt(m.createdAt) + '</span></div>';
-        h += '<p style="font-size:13px;color:#1a1a1a;line-height:1.65;margin:0 0 ' + (rList.length?'8px':'0') + ';white-space:pre-wrap;">' + esc(m.content) + '</p>';
-        if (rList.length) {
-          h += '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
-          rList.forEach(function(r) {
-            var st = m.status && m.status[r] ? m.status[r] : 'unread';
-            h += '<span style="font-size:10px;padding:2px 8px;border-radius:4px;' + (stC[st]||stC.unread) + ';">' + (ROLES[r]?ROLES[r].l:r) + ' ' + (stL[st]||stL.unread) + '</span>';
-          });
-          h += '</div>';
-        } else {
-          h += '<div style="font-size:10px;color:#bbb;">팀장에게 전달됨</div>';
-        }
-        h += '</div>';
+  // ── 보드 렌더 ──
+  function renderBoard() {
+    var active = sortedActive();
+    var layout = getLayout();
+    // 레이아웃에 없는 포스트잇은 자동 배치 추가
+    var needLayout = active.filter(function(p){ return !layout[p.id]; });
+    if (needLayout.length) {
+      var auto = autoLayout(needLayout);
+      // 기존 레이아웃 아래로 붙이기
+      var maxY = 0;
+      Object.values(layout).forEach(function(l){ if (l.y > maxY) maxY = l.y + 195; });
+      Object.keys(auto).forEach(function(id) {
+        layout[id] = { x: auto[id].x, y: auto[id].y + maxY, z: zCounter++ };
       });
+      setLayout(layout);
+    }
+
+    // 캔버스 높이 계산
+    var maxBottom = 300;
+    active.forEach(function(p) {
+      var pos = layout[p.id] || { x:0, y:0, z:1 };
+      var bot = pos.y + 200;
+      if (bot > maxBottom) maxBottom = bot;
+    });
+
+    var h = '<div id="pab-canvas" style="position:relative;width:100%;min-height:' + (maxBottom+40) + 'px;touch-action:none;">';
+    active.forEach(function(p) {
+      var pos = layout[p.id] || { x:10, y:10, z:1 };
+      h += renderCard(p, pos);
+    });
+    if (!active.length) {
+      h += '<div style="text-align:center;padding:60px 0;color:#bbb;font-size:13px;">작성된 포스트잇이 없습니다.</div>';
     }
     h += '</div>';
     return h;
   }
 
-  // ── 작성 ──
-  function renderCompose() {
-    var v = ROLES[curRole];
-    var others = Object.keys(ROLES).filter(function(k){ return k !== curRole; });
+  // ── 완료함 ──
+  function renderArchive() {
+    var done = sortedDone();
+    var h = '<div style="padding:.5rem 0 1.5rem;">';
+    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">';
+    h += '<button data-view="board" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
+    h += '<div style="font-size:14px;font-weight:600;color:#1a1a1a;">완료함 (' + done.length + '건)</div></div>';
+    if (!done.length) { h += '<div style="text-align:center;padding:48px;color:#bbb;font-size:13px;">처리완료된 포스트잇이 없습니다.</div>'; }
+    else done.forEach(function(p) {
+      var v = ROLE_DEF[p.role] || { l:p.role, color:'#f5f5f5', border:'#ddd' };
+      var dv = ROLE_DEF[p.done.byRole] || { l:p.done.byLabel||p.done.by };
+      h += '<div style="background:' + v.color + ';border:1px solid ' + v.border + ';border-radius:10px;padding:12px;margin-bottom:10px;opacity:.7;">';
+      h += '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;">';
+      h += '<div style="width:8px;height:8px;border-radius:50%;background:' + v.border + ';"></div>';
+      h += '<span style="font-size:11px;color:#555;">' + esc(v.l) + '</span>';
+      h += '<span style="font-size:10px;color:#bbb;margin-left:auto;">' + fmt(p.createdAt) + '</span></div>';
+      h += '<div style="font-size:12px;color:#555;line-height:1.6;margin-bottom:8px;white-space:pre-wrap;">' + esc(p.content) + '</div>';
+      h += '<div style="font-size:10px;color:#15803D;padding:4px 8px;background:#F0FDF4;border-radius:6px;display:inline-block;">✓ ' + esc(dv.l||p.done.byLabel||'') + ' · ' + fmt(p.done.at) + ' 처리완료</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
+  // ── 작성 화면 ──
+  function renderWrite() {
+    var v = ROLE_DEF[myRole] || {};
     var h = '<div style="padding:.5rem 0 1.5rem;">';
     h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">';
-    h += '<button data-view="inbox" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
-    h += '<div style="font-size:14px;font-weight:500;color:#1a1a1a;">새 메시지 작성</div></div>';
-    h += '<div style="margin-bottom:12px;"><div style="font-size:10px;color:#888;margin-bottom:4px;">보내는 사람</div>';
-    h += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:#f5f6f7;border:0.5px solid #e0e0e0;">';
-    h += '<div style="width:26px;height:26px;border-radius:50%;background:' + v.bg + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:' + v.tx + ';">' + v.init + '</div>';
-    h += '<span style="font-size:13px;">' + v.l + '</span></div></div>';
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">';
-    h += '<div><div style="font-size:10px;color:#888;margin-bottom:4px;">유형</div><select id="comp-type" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">';
-    h += '<option value="handover">전달사항</option><option value="caution">주의사항</option></select></div>';
-    h += '<div><div style="font-size:10px;color:#888;margin-bottom:4px;">받는 사람</div><select id="comp-to" style="width:100%;padding:8px 10px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;">';
-    others.forEach(function(k){ h += '<option value="' + k + '">' + ROLES[k].l + '</option>'; });
-    h += '<option value="all">매니저 공통</option><option value="leader">팀장에게</option></select></div></div>';
-    h += '<div style="margin-bottom:16px;"><div style="font-size:10px;color:#888;margin-bottom:4px;">내용</div>';
-    h += '<textarea id="comp-content" placeholder="메시지를 입력하세요..." style="width:100%;padding:10px 12px;border-radius:8px;font-size:13px;border:0.5px solid #ddd;background:#fff;color:#1a1a1a;resize:vertical;min-height:120px;font-family:inherit;line-height:1.6;box-sizing:border-box;"></textarea></div>';
-    h += '<button id="btn-send" style="width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">전송하기</button>';
+    h += '<button data-view="board" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
+    h += '<div style="font-size:14px;font-weight:600;color:#1a1a1a;">포스트잇 작성</div></div>';
+    h += '<div style="background:' + (v.color||'#fff') + ';border:1.5px solid ' + (v.border||'#ddd') + ';border-radius:12px;padding:14px;margin-bottom:14px;">';
+    h += '<div style="font-size:11px;color:#888;margin-bottom:6px;">' + (v.l||myRole) + '로 작성됩니다</div>';
+    h += '<textarea id="post-content" placeholder="내용을 입력하세요..." style="width:100%;min-height:120px;padding:10px;border-radius:8px;border:0.5px solid ' + (v.border||'#ddd') + ';background:rgba(255,255,255,.7);font-size:13px;font-family:inherit;line-height:1.6;resize:vertical;box-sizing:border-box;"></textarea>';
+    h += '</div>';
+    h += '<label style="display:flex;align-items:center;gap:8px;padding:12px;background:#FEF2F2;border-radius:10px;border:0.5px solid #FECACA;cursor:pointer;margin-bottom:16px;">';
+    h += '<input type="checkbox" id="post-important" style="width:16px;height:16px;cursor:pointer;">';
+    h += '<div><div style="font-size:13px;font-weight:500;color:#B91C1C;">🔴 중요 항목으로 표시</div>';
+    h += '<div style="font-size:11px;color:#B91C1C;margin-top:1px;">빨간 띠 처리 후 상단 배치</div></div>';
+    h += '</label>';
+    h += '<button id="btn-post-submit" style="width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">등록하기</button>';
+    h += '</div>';
+    return h;
+  }
+
+  // ── 회원가입 화면 ──
+  function renderRegister() {
+    var h = '<div style="padding:.5rem 0 1.5rem;">';
+    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">';
+    h += '<button data-view="board" style="border:none;background:none;cursor:pointer;font-size:20px;color:#aaa;padding:0;line-height:1;">←</button>';
+    h += '<div style="font-size:14px;font-weight:600;color:#1a1a1a;">처음 사용 등록</div></div>';
+    h += '<div style="font-size:12px;color:#888;margin-bottom:16px;padding:10px;background:#f5f6f7;border-radius:8px;">역할을 선택하고 4자리 PIN을 설정하세요.<br>이미 등록된 역할은 관리자에게 문의해 주세요.</div>';
+    ROLE_KEYS.forEach(function(k) {
+      var v = ROLE_DEF[k];
+      var hasPin = !!(settings.pins && settings.pins[k]);
+      h += '<div style="display:flex;align-items:center;padding:14px;margin-bottom:8px;border-radius:12px;border:0.5px solid ' + (hasPin?'#e0e0e0':v.border) + ';background:' + (hasPin?'#fafafa':v.color) + ';opacity:' + (hasPin?'.5':'1') + ';">';
+      h += '<div style="width:36px;height:36px;border-radius:50%;background:' + (hasPin?'#eee':v.color) + ';border:1.5px solid ' + v.border + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#333;margin-right:12px;flex-shrink:0;">' + v.l.slice(0,2) + '</div>';
+      h += '<div style="flex:1;"><div style="font-size:13px;font-weight:500;color:#1a1a1a;">' + v.l + '</div>';
+      h += '<div style="font-size:11px;color:' + (hasPin?'#B91C1C':'#888') + ';margin-top:1px;">' + (hasPin?'🔒 이미 등록됨':'등록 가능') + '</div></div>';
+      if (!hasPin) {
+        h += '<button data-reg-role="' + k + '" style="padding:7px 16px;border-radius:8px;font-size:12px;font-weight:500;background:#1a1a1a;color:#fff;border:none;cursor:pointer;">선택</button>';
+      }
+      h += '</div>';
+    });
     h += '</div>';
     return h;
   }
@@ -901,36 +1068,49 @@ function initBoard() {
   function render() {
     var root = document.getElementById('board-root');
     if (!root) return;
-    if (!curRole)            root.innerHTML = renderHome();
-    else if (view==='sent')    root.innerHTML = renderSent();
-    else if (view==='compose') root.innerHTML = renderCompose();
-    else                       root.innerHTML = renderInbox();
-    bind();
+    if (view === 'archive')  { root.innerHTML = renderArchive(); bindEvents(root); return; }
+    if (view === 'write')    { root.innerHTML = renderWrite();   bindEvents(root); return; }
+    if (view === 'register') { root.innerHTML = renderRegister(); bindEvents(root); return; }
+
+    // 메인 보드
+    var h = '<div style="padding:.5rem 0 1.5rem;">';
+    h += renderNotices();
+    h += renderRoleBar();
+    h += renderToolbar();
+    h += renderBoard();
+    if (!myRole) {
+      h += '<div style="text-align:center;margin-top:20px;">';
+      h += '<button data-view="register" style="font-size:12px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;">처음 사용하시나요? 역할 등록하기</button>';
+      h += '</div>';
+    }
+    h += '</div>';
+    root.innerHTML = h;
+    bindEvents(root);
+    bindDrag(root);
   }
 
   // ── 이벤트 바인딩 ──
-  function bind() {
-    var root = document.getElementById('board-root');
-    if (!root) return;
-
+  function bindEvents(root) {
     // 공고 더보기
     root.querySelectorAll('[data-expand]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         var el = document.getElementById('nc-' + btn.dataset.expand);
         if (!el) return;
         if (btn.textContent.indexOf('더보기') >= 0) { el.textContent = btn.dataset.full; btn.textContent = '접기 ▲'; }
-        else { el.textContent = btn.dataset.full.slice(0,50) + '…'; btn.textContent = '더보기 ▼'; }
+        else { el.textContent = btn.dataset.full.slice(0,50)+'…'; btn.textContent = '더보기 ▼'; }
       });
     });
 
     // 역할 선택
-    root.querySelectorAll('[data-role]').forEach(function(btn) {
-      btn.addEventListener('click', function() { curRole = btn.dataset.role; pinOK = true; view = 'inbox'; markRead(); render(); });
-    });
-
-    // 뒤로
-    root.querySelectorAll('[data-back]').forEach(function(btn) {
-      btn.addEventListener('click', function() { curRole = null; view = 'home'; render(); });
+    root.querySelectorAll('[data-select-role]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var k = btn.dataset.selectRole;
+        var appRole = window.appState && window.appState.role;
+        var appMode = window.appState && window.appState.mode;
+        var canSelect = (appMode === 'manager' && k === appRole) || (appMode === 'staff' && k === 'staff');
+        if (!canSelect) return;
+        myRole = k; clearLayout(); render();
+      });
     });
 
     // 뷰 전환
@@ -938,91 +1118,173 @@ function initBoard() {
       btn.addEventListener('click', function() { view = btn.dataset.view; render(); });
     });
 
-    // 공통 처리완료
-    root.querySelectorAll('[data-cdone]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        commonMsgs = commonMsgs.map(function(m){ return m.id === btn.dataset.cdone ? Object.assign({}, m, {commonDone:true}) : m; });
-        saveCommon(); render();
+    // 정렬
+    root.querySelectorAll('[data-sort]').forEach(function(btn) {
+      btn.addEventListener('click', function() { sortMode = btn.dataset.sort; clearLayout(); render(); });
+    });
+    var sortClearBtn = root.querySelector('[data-sort-clear]');
+    if (sortClearBtn) sortClearBtn.addEventListener('click', function() { clearLayout(); render(); });
+
+    // 중요 토글
+    root.querySelectorAll('[data-toggle-imp]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var id = btn.dataset.toggleImp;
+        posts = posts.map(function(p) { return p.id === id ? Object.assign({}, p, {important: !p.important}) : p; });
+        clearLayout(); savePosts(); render();
       });
     });
 
-    // PIN 변경 버튼
-    var pinBtn = root.querySelector('#btn-pin-change');
-    if (pinBtn && curRole) pinBtn.addEventListener('click', function(){ showPinChange(curRole); });
-
-    // 전송
-    var sendBtn = root.querySelector('#btn-send');
-    if (sendBtn) {
-      sendBtn.addEventListener('click', function() {
-        var content = (root.querySelector('#comp-content') || {value:''}).value.trim();
-        if (!content || !curRole) return;
-        var to   = (root.querySelector('#comp-to')   || {value:'all'}).value;
-        var type = (root.querySelector('#comp-type') || {value:'handover'}).value;
-        var newMsg = { id: Date.now()+'', type:type, from:curRole, to:to, content:content, createdAt: new Date().toISOString() };
-        if (to === 'all') {
-          newMsg.commonDone = false;
-          commonMsgs = [newMsg].concat(commonMsgs);
-          saveCommon();
-          var status = {};
-          ALL.forEach(function(r){ status[r] = (r !== curRole) ? 'unread' : null; });
-          var forInbox = Object.assign({}, newMsg, {status: status});
-          msgs = [forInbox].concat(msgs);
-          saveMsgs();
-        } else {
-          var rList = rcpts(to);
-          var status2 = {};
-          ALL.forEach(function(r){ status2[r] = rList.indexOf(r) >= 0 ? 'unread' : null; });
-          newMsg.status = status2;
-          msgs = [newMsg].concat(msgs);
-          saveMsgs();
+    // 처리완료
+    root.querySelectorAll('[data-done-post]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (!myRole) return;
+        var id = btn.dataset.donePost;
+        var v = ROLE_DEF[myRole] || {};
+        posts = posts.map(function(p) {
+          if (p.id !== id) return p;
+          return Object.assign({}, p, { done: { by: myRole, byRole: myRole, byLabel: v.l, at: new Date().toISOString() } });
+        });
+        // 완료 포스트잇 30건 제한
+        var donePosts = posts.filter(function(p){ return !!p.done; });
+        if (donePosts.length > 30) {
+          var oldest = donePosts.sort(function(a,b){ return new Date(a.done.at)-new Date(b.done.at); });
+          var removeIds = oldest.slice(0, donePosts.length-30).map(function(p){ return p.id; });
+          posts = posts.filter(function(p){ return removeIds.indexOf(p.id) < 0; });
         }
-        view = 'inbox'; render();
+        savePosts(); render();
+      });
+    });
+
+    // 포스트잇 작성
+    var submitBtn = root.querySelector('#btn-post-submit');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', function() {
+        var content = (root.querySelector('#post-content')||{value:''}).value.trim();
+        if (!content || !myRole) return;
+        var important = !!(root.querySelector('#post-important')||{}).checked;
+        var v = ROLE_DEF[myRole] || {};
+        var newPost = {
+          id: Date.now()+'', content: content,
+          author: v.l, role: myRole, color: v.color,
+          important: important, createdAt: new Date().toISOString(), done: null
+        };
+        posts = [newPost].concat(posts);
+        // 활성 50건 제한
+        var active = posts.filter(function(p){ return !p.done; });
+        if (active.length > 50) {
+          var oldest = active.sort(function(a,b){ return new Date(a.createdAt)-new Date(b.createdAt); });
+          var removeIds = oldest.slice(0, active.length-50).map(function(p){ return p.id; });
+          posts = posts.filter(function(p){ return removeIds.indexOf(p.id) < 0; });
+        }
+        savePosts(); view = 'board'; clearLayout(); render();
       });
     }
 
-    // 처리완료
-    root.querySelectorAll('[data-done]').forEach(function(btn) {
+    // 회원가입 역할 선택
+    root.querySelectorAll('[data-reg-role]').forEach(function(btn) {
       btn.addEventListener('click', function() {
-        msgs = msgs.map(function(m) {
-          if (m.id !== btn.dataset.done) return m;
-          var s = Object.assign({}, m.status); s[curRole] = 'done';
-          return Object.assign({}, m, {status: s});
+        var k = btn.dataset.regRole;
+        showPinRegister(k, function() {
+          // 등록 완료 후 자동 로그인
+          myRole = k;
+          window.appState = { mode: k==='staff'?'staff':'manager', role: k };
+          window._boardRoleOverride = k;
+          updateTabBar(); insertLockButton();
+          view = 'board'; render();
         });
-        saveMsgs(); render();
       });
     });
   }
 
-  function markRead() {
-    msgs = msgs.map(function(m) {
-      if (m.status && m.status[curRole] === 'unread' && m.from !== curRole) {
-        var s = Object.assign({}, m.status); s[curRole] = 'read';
-        return Object.assign({}, m, {status: s});
-      }
-      return m;
-    });
-    saveMsgs();
+  // ── 드래그 (touch + mouse) ──
+  function bindDrag(root) {
+    var canvas = root.querySelector('#pab-canvas');
+    if (!canvas) return;
+    var dragging = null, startX, startY, origX, origY;
+
+    function onStart(e) {
+      var card = e.target.closest('.pab-card');
+      if (!card) return;
+      // 버튼 클릭은 드래그 아님
+      if (e.target.closest('button')) return;
+      e.preventDefault();
+      var touch = e.touches ? e.touches[0] : e;
+      dragging = card;
+      startX = touch.clientX;
+      startY = touch.clientY;
+      var layout = getLayout();
+      var id = card.dataset.pid;
+      origX = layout[id] ? layout[id].x : 0;
+      origY = layout[id] ? layout[id].y : 0;
+      // 최상단 z-index
+      zCounter++;
+      var newLayout = Object.assign({}, layout);
+      newLayout[id] = { x: origX, y: origY, z: zCounter };
+      setLayout(newLayout);
+      card.style.zIndex = zCounter;
+      card.style.cursor = 'grabbing';
+      card.style.boxShadow = '0 8px 24px rgba(0,0,0,.18)';
+    }
+    function onMove(e) {
+      if (!dragging) return;
+      e.preventDefault();
+      var touch = e.touches ? e.touches[0] : e;
+      var dx = touch.clientX - startX;
+      var dy = touch.clientY - startY;
+      var newX = Math.max(0, origX + dx);
+      var newY = Math.max(0, origY + dy);
+      dragging.style.left = newX + 'px';
+      dragging.style.top  = newY + 'px';
+      dragging.style.transition = 'none';
+    }
+    function onEnd(e) {
+      if (!dragging) return;
+      var id = dragging.dataset.pid;
+      var layout = getLayout();
+      var newX = parseInt(dragging.style.left) || 0;
+      var newY = parseInt(dragging.style.top)  || 0;
+      layout[id] = { x: newX, y: newY, z: zCounter };
+      setLayout(layout);
+      dragging.style.cursor = 'grab';
+      dragging.style.boxShadow = '';
+      dragging = null;
+    }
+
+    canvas.addEventListener('mousedown',  onStart);
+    canvas.addEventListener('touchstart', onStart, { passive: false });
+    window.addEventListener('mousemove',  onMove);
+    window.addEventListener('touchmove',  onMove, { passive: false });
+    window.addEventListener('mouseup',    onEnd);
+    window.addEventListener('touchend',   onEnd);
   }
 
   // ── 초기화 ──
   function init() {
-    if (window._boardRoleOverride && !curRole) {
-      curRole = window._boardRoleOverride; pinOK = true; view = 'inbox';
-    }
+    // 앱 모드에 따라 역할 자동 설정
+    var appRole = window.appState && window.appState.role;
+    var appMode = window.appState && window.appState.mode;
+    if (appMode === 'manager' && appRole) myRole = appRole;
+    else if (appMode === 'staff') myRole = 'staff';
     loadLocal(); render();
-    syncGAS().then(function(){ render(); });
+    syncGAS().then(function() { render(); });
   }
 
   window._boardRefresh = function() {
-    if (window._boardRoleOverride && !curRole) {
-      curRole = window._boardRoleOverride; pinOK = true; view = 'inbox';
-    }
+    var appRole = window.appState && window.appState.role;
+    var appMode = window.appState && window.appState.mode;
+    if (appMode === 'manager' && appRole) myRole = appRole;
+    else if (appMode === 'staff') myRole = 'staff';
+    else myRole = null;
+    view = 'board';
     loadLocal(); render();
-    syncGAS().then(function(){ render(); });
+    syncGAS().then(function() { render(); });
   };
 
   init();
 }
+
 
 
 // ── 탭 전환 ──
